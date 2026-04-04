@@ -8,7 +8,11 @@ The capability is intentionally narrow: it owns protobuf workflow operations suc
 
 - Public entrypoint: `@codesjoy_bazel_kit//rules/protobuf:buf.bzl`
 - Managed tool extension: `protobuf_tools`
-- Managed repo: `protobuf_tool_buf`
+- Managed repos:
+  - `protobuf_tool_buf`
+  - `protobuf_tool_protoc_gen_codesjoy_event`
+  - `protobuf_tool_protoc_gen_codesjoy_reason`
+  - `protobuf_tool_protoc_gen_google_aip`
 - Current pinned Buf version: `v1.67.0`
 - Example workspace: [`examples/protobuf`](../examples/protobuf)
 
@@ -50,6 +54,7 @@ Those concerns are orthogonal to the workflow surface here. The goal is to make 
 - `buf_breaking` has two modes:
   - explicit `against`, passed straight to Buf
   - default Git baseline against `origin/main`, scoped to the directory of `buf.yaml`
+- `buf_generate` can optionally receive Bazel-managed local plugins. The launcher prepends their runfiles directories to `PATH` before invoking Buf.
 
 ## Managed Tools And Prerequisites
 
@@ -57,11 +62,20 @@ Those concerns are orthogonal to the workflow surface here. The goal is to make 
 
 ```starlark
 protobuf_tools = use_extension("@codesjoy_bazel_kit//rules/protobuf:extensions.bzl", "protobuf_tools")
-protobuf_tools.install()
+protobuf_tools.install(
+    plugins = [
+        "codesjoy_event",
+        "codesjoy_reason",
+        "google_aip",
+    ],
+)
 
 use_repo(
     protobuf_tools,
     "protobuf_tool_buf",
+    "protobuf_tool_protoc_gen_codesjoy_event",
+    "protobuf_tool_protoc_gen_codesjoy_reason",
+    "protobuf_tool_protoc_gen_google_aip",
 )
 ```
 
@@ -75,13 +89,20 @@ protobuf_tools.override(version = "v1.67.0")
 
 The override is validated against the versions committed in [`tools/protobuf/versions.bzl`](../tools/protobuf/versions.bzl). This is a curated override, not an arbitrary tag passthrough.
 
+The source pin for the codesjoy plugins can also be restated explicitly:
+
+```starlark
+protobuf_tools.pkg_override(commit = "9bfa697c14eeb20cfd5b7193e459525459e08406")
+```
+
 ### Host Prerequisites
 
 - No host `buf` install is required.
 - `git` is required only when `buf_breaking` uses the default Git baseline mode.
 - Plugins referenced by `buf.gen.yaml` are the caller's responsibility:
-  - local plugins must exist and be executable on the host
+  - local plugins must exist and be executable on the host, or be supplied through `local_plugins`
   - remote plugins follow Buf's own resolution behavior
+- The managed codesjoy plugins are built from the pinned `github.com/codesjoy/pkg` commit rather than fetched as release binaries.
 
 ## Public API
 
@@ -99,7 +120,7 @@ load("@codesjoy_bazel_kit//rules/protobuf:buf.bzl", "buf_breaking", "buf_dep_upd
 | `buf_format_check` | `config` | `files` | no | Runs Buf's diff/exit-code check mode |
 | `buf_lint` | `config` | none | no | Lints the config root directly |
 | `buf_breaking` | `config` | `against`, `against_git_remote`, `against_git_branch` | no | Uses explicit `against` when set; otherwise builds a Git baseline against `origin/main` by default |
-| `buf_generate` | `config`, `template` | none | yes | Runs `buf generate --template <buf.gen.yaml>` against the config root |
+| `buf_generate` | `config`, `template` | `local_plugins` | yes | Runs `buf generate --template <buf.gen.yaml>` against the config root |
 | `buf_dep_update` | `config` | none | yes, when Buf updates lock state | Runs `buf dep update` for the config root |
 
 ### Attribute Semantics
@@ -135,6 +156,16 @@ These attrs only matter when `against` is omitted. The default launcher construc
 
 For the example workspace, the default mode effectively compares the current `examples/protobuf` tree against `refs/remotes/origin/main`.
 
+#### `local_plugins`
+
+`local_plugins` is a label list of managed binaries. `buf_generate` prepends the parent directories of those binaries to `PATH` before invoking Buf.
+
+This is the intended integration path for the managed codesjoy plugins:
+
+- `@protobuf_tool_protoc_gen_codesjoy_event//:tool`
+- `@protobuf_tool_protoc_gen_codesjoy_reason//:tool`
+- `@protobuf_tool_protoc_gen_google_aip//:tool`
+
 ## Common Workflows
 
 ### Minimal BUILD Usage
@@ -166,6 +197,13 @@ buf_generate(
     name = "generate",
     config = ":buf.yaml",
     template = ":buf.gen.yaml",
+)
+
+buf_generate(
+    name = "generate_codesjoy_event",
+    config = ":buf.yaml",
+    template = ":buf.gen.codesjoy_event.yaml",
+    local_plugins = ["@protobuf_tool_protoc_gen_codesjoy_event//:tool"],
 )
 
 buf_dep_update(
@@ -215,6 +253,41 @@ That template keeps the example and tests self-contained. Additional template pr
 
 These presets are examples only. `buf_generate` always consumes the caller's own template file.
 
+### Generate With Bazel-Managed codesjoy Plugins
+
+Event plugin:
+
+```starlark
+buf_generate(
+    name = "generate_codesjoy_event",
+    config = ":buf.yaml",
+    template = ":buf.gen.codesjoy_event.yaml",
+    local_plugins = ["@protobuf_tool_protoc_gen_codesjoy_event//:tool"],
+)
+```
+
+Reason plugin:
+
+```starlark
+buf_generate(
+    name = "generate_codesjoy_reason",
+    config = ":buf.yaml",
+    template = ":buf.gen.codesjoy_reason.yaml",
+    local_plugins = ["@protobuf_tool_protoc_gen_codesjoy_reason//:tool"],
+)
+```
+
+Google AIP plugin:
+
+```starlark
+buf_generate(
+    name = "generate_google_aip",
+    config = ":buf.yaml",
+    template = ":buf.gen.google_aip.yaml",
+    local_plugins = ["@protobuf_tool_protoc_gen_google_aip//:tool"],
+)
+```
+
 ### Dependency Lock Maintenance
 
 ```starlark
@@ -233,6 +306,9 @@ The protobuf example workspace is the reference usage:
 - BUILD target definitions: [`examples/protobuf/BUILD.bazel`](../examples/protobuf/BUILD.bazel)
 - Buf config: [`examples/protobuf/buf.yaml`](../examples/protobuf/buf.yaml)
 - Default generation template: [`examples/protobuf/buf.gen.yaml`](../examples/protobuf/buf.gen.yaml)
+- Codesjoy event template: [`examples/protobuf/buf.gen.codesjoy_event.yaml`](../examples/protobuf/buf.gen.codesjoy_event.yaml)
+- Codesjoy reason template: [`examples/protobuf/buf.gen.codesjoy_reason.yaml`](../examples/protobuf/buf.gen.codesjoy_reason.yaml)
+- Google AIP template: [`examples/protobuf/buf.gen.google_aip.yaml`](../examples/protobuf/buf.gen.google_aip.yaml)
 - Schema: [`examples/protobuf/proto/acme/weather/v1/weather.proto`](../examples/protobuf/proto/acme/weather/v1/weather.proto)
 
 Example targets:
@@ -243,6 +319,9 @@ Example targets:
 - `//examples/protobuf:breaking`
 - `//examples/protobuf:breaking_explicit`
 - `//examples/protobuf:generate`
+- `//examples/protobuf:generate_codesjoy_event`
+- `//examples/protobuf:generate_codesjoy_reason`
+- `//examples/protobuf:generate_google_aip`
 - `//examples/protobuf:dep_update`
 
 ## Limits And Non-Goals

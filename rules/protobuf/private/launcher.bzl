@@ -36,7 +36,7 @@ def _default_against(remote, branch, input_path):
         against += ",subdir=%s" % input_path
     return against
 
-def _render_shell(kind, input_path, files, template, against, against_git_remote, against_git_branch, tools):
+def _render_shell(kind, input_path, files, template, against, against_git_remote, against_git_branch, local_plugin_dirs, tools):
     lines = [
         "#!/usr/bin/env bash",
         "set -euo pipefail",
@@ -57,6 +57,8 @@ def _render_shell(kind, input_path, files, template, against, against_git_remote
         "BUF=%s" % _sh_quote("${RUNFILES_DIR}/" + tools["buf"]),
         "INPUT_PATH=%s" % _sh_quote(input_path),
     ]
+    if local_plugin_dirs:
+        lines.append("PATH=%s:\"${PATH}\"" % ":".join([_sh_quote("${RUNFILES_DIR}/" + path) for path in local_plugin_dirs]))
 
     if kind == "format":
         if files:
@@ -121,7 +123,7 @@ def _render_shell(kind, input_path, files, template, against, against_git_remote
 
     return "\n".join(lines) + "\n"
 
-def _render_batch(kind, input_path, files, template, against, against_git_remote, against_git_branch, tools):
+def _render_batch(kind, input_path, files, template, against, against_git_remote, against_git_branch, local_plugin_dirs, tools):
     lines = [
         "@echo off",
         "setlocal EnableExtensions EnableDelayedExpansion",
@@ -135,6 +137,8 @@ def _render_batch(kind, input_path, files, template, against, against_git_remote
         "set \"BUF=%RUNFILES_DIR%%%s\"" % tools["buf"],
         "set \"INPUT_PATH=%s\"" % input_path,
     ]
+    if local_plugin_dirs:
+        lines.append("set \"PATH=%s;%%PATH%%\"" % ";".join(["%RUNFILES_DIR%%" + path for path in local_plugin_dirs]))
 
     if kind == "format":
         if files:
@@ -224,9 +228,15 @@ def _impl(ctx):
     template = ctx.file.template.short_path if ctx.file.template else ""
 
     tool_file = _tool_file(ctx.attr.tool_buf, "buf")
+    local_plugin_files = [_tool_file(dep, "local_plugin") for dep in ctx.attr.local_plugins]
     tools = {
         "buf": _tool_runfiles_path(tool_file, is_windows),
     }
+    local_plugin_dirs = []
+    for plugin_file in local_plugin_files:
+        runfiles_path = _tool_runfiles_path(plugin_file, is_windows)
+        index = runfiles_path.rfind("\\" if is_windows else "/")
+        local_plugin_dirs.append(runfiles_path[:index] if index != -1 else ".")
 
     launcher = ctx.actions.declare_file(ctx.label.name + (".bat" if is_windows else ".sh"))
     content = _render_batch(
@@ -237,6 +247,7 @@ def _impl(ctx):
         ctx.attr.against,
         ctx.attr.against_git_remote,
         ctx.attr.against_git_branch,
+        local_plugin_dirs,
         tools,
     ) if is_windows else _render_shell(
         kind,
@@ -246,6 +257,7 @@ def _impl(ctx):
         ctx.attr.against,
         ctx.attr.against_git_remote,
         ctx.attr.against_git_branch,
+        local_plugin_dirs,
         tools,
     )
     ctx.actions.write(
@@ -256,6 +268,7 @@ def _impl(ctx):
 
     inputs = [ctx.file.config, tool_file]
     inputs.extend(ctx.files.files)
+    inputs.extend(local_plugin_files)
     if ctx.file.template:
         inputs.append(ctx.file.template)
 
@@ -275,6 +288,7 @@ protobuf_buf_runner = rule(
         "config": attr.label(allow_single_file = True, mandatory = True),
         "files": attr.label_list(allow_files = [".proto"]),
         "template": attr.label(allow_single_file = True),
+        "local_plugins": attr.label_list(cfg = "exec"),
         "against": attr.string(),
         "against_git_remote": attr.string(default = "origin"),
         "against_git_branch": attr.string(default = "main"),

@@ -1,0 +1,25 @@
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//rules/modelgen:defs.bzl", "codesjoy_modelgen")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["override.yaml"])
+
+codesjoy_modelgen(
+    name = "generate_models",
+    dsn = "postgres://modelgen:modelgen@127.0.0.1:5432/modelgen_it?sslmode=disable",
+    schema = "public",
+    tables = ["users"],
+    out_dir = "examples/modelgen/output",
+    override = ":override.yaml",
+    gen_aipsql = True,
+    timestamp_mode = "unix_nano",
+    package_name = "output",
+)
+
+sh_test(
+    name = "launcher_smoke_test",
+    srcs = ["launcher_smoke_test.sh"],
+    data = [":generate_models"],
+    args = ["$(rootpath :generate_models)"],
+)

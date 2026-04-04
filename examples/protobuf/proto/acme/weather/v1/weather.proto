@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package acme.weather.v1;
 
+option go_package = "github.com/codesjoy/bazel-kit/examples/protobuf/gen/weather/acme/weather/v1;weatherv1";
+
 message ForecastRequest {
   string city = 1;
 }

@@ -1,0 +1,4 @@
+include_tables: []
+exclude_tables: []
+gen_aipsql: true
+timestamp_mode: unix_nano

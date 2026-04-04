@@ -4,6 +4,9 @@ load("//rules/protobuf:buf.bzl", "buf_breaking", "buf_dep_update", "buf_format",
 package(default_visibility = ["//visibility:public"])
 
 exports_files([
+    "buf.gen.codesjoy_event.yaml",
+    "buf.gen.codesjoy_reason.yaml",
+    "buf.gen.google_aip.yaml",
     "buf.gen.yaml",
     "buf.yaml",
 ])
@@ -50,6 +53,27 @@ buf_generate(
     template = ":buf.gen.yaml",
 )
 
+buf_generate(
+    name = "generate_codesjoy_event",
+    config = ":buf.yaml",
+    template = ":buf.gen.codesjoy_event.yaml",
+    local_plugins = ["@protobuf_tool_protoc_gen_codesjoy_event//:tool"],
+)
+
+buf_generate(
+    name = "generate_codesjoy_reason",
+    config = ":buf.yaml",
+    template = ":buf.gen.codesjoy_reason.yaml",
+    local_plugins = ["@protobuf_tool_protoc_gen_codesjoy_reason//:tool"],
+)
+
+buf_generate(
+    name = "generate_google_aip",
+    config = ":buf.yaml",
+    template = ":buf.gen.google_aip.yaml",
+    local_plugins = ["@protobuf_tool_protoc_gen_google_aip//:tool"],
+)
+
 buf_dep_update(
     name = "dep_update",
     config = ":buf.yaml",
@@ -66,6 +90,9 @@ sh_test(
         ":format",
         ":format_check",
         ":generate",
+        ":generate_codesjoy_event",
+        ":generate_codesjoy_reason",
+        ":generate_google_aip",
         ":lint",
     ],
     args = [
@@ -75,6 +102,9 @@ sh_test(
         "$(rootpath :breaking)",
         "$(rootpath :breaking_explicit)",
         "$(rootpath :generate)",
+        "$(rootpath :generate_codesjoy_event)",
+        "$(rootpath :generate_codesjoy_reason)",
+        "$(rootpath :generate_google_aip)",
         "$(rootpath :dep_update)",
     ],
 )

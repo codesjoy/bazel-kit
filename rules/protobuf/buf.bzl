@@ -37,12 +37,13 @@ def buf_breaking(name, config, against = None, against_git_remote = "origin", ag
         **kwargs
     )
 
-def buf_generate(name, config, template, **kwargs):
+def buf_generate(name, config, template, local_plugins = [], **kwargs):
     protobuf_buf_runner(
         name = name,
         kind = "generate",
         config = config,
         template = template,
+        local_plugins = local_plugins,
         **kwargs
     )
 

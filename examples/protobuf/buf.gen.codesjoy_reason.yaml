@@ -1,0 +1,6 @@
+version: v2
+plugins:
+  - local: protoc-gen-codesjoy-reason
+    out: ./examples/protobuf/gen/codesjoy_reason
+    opt:
+      - paths=source_relative

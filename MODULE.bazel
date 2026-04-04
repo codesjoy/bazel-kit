@@ -15,7 +15,16 @@ quality_tools = use_extension("//rules/quality:extensions.bzl", "quality_tools")
 quality_tools.install(domains = ["go", "shell"])
 
 protobuf_tools = use_extension("//rules/protobuf:extensions.bzl", "protobuf_tools")
-protobuf_tools.install()
+protobuf_tools.install(
+    plugins = [
+        "codesjoy_event",
+        "codesjoy_reason",
+        "google_aip",
+    ],
+)
+
+modelgen_tools = use_extension("//rules/modelgen:extensions.bzl", "modelgen_tools")
+modelgen_tools.install()
 
 use_repo(
     quality_tools,
@@ -30,4 +39,12 @@ use_repo(
 use_repo(
     protobuf_tools,
     "protobuf_tool_buf",
+    "protobuf_tool_protoc_gen_codesjoy_event",
+    "protobuf_tool_protoc_gen_codesjoy_reason",
+    "protobuf_tool_protoc_gen_google_aip",
+)
+
+use_repo(
+    modelgen_tools,
+    "modelgen_tool_codesjoy_modelgen",
 )

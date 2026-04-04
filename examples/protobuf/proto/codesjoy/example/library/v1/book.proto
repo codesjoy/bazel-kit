@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package codesjoy.example.library.v1;
+
+import "google/api/resource.proto";
+
+option go_package = "github.com/codesjoy/bazel-kit/examples/protobuf/gen/google_aip/codesjoy/example/library/v1;libraryv1";
+
+option (google.api.resource_definition) = {
+  type: "library.googleapis.com/Archive"
+  pattern: "archives/{archive}"
+  plural: "archives"
+  singular: "archive"
+};
+
+message Book {
+  option (google.api.resource) = {
+    type: "library.googleapis.com/Book"
+    pattern: "publishers/{publisher}/books/{book}"
+    pattern: "archives/{archive}/books/{book}"
+    plural: "books"
+    singular: "book"
+  };
+
+  string name = 1;
+  string title = 2;
+}

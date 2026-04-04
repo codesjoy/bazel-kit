@@ -1,0 +1,6 @@
+version: v2
+plugins:
+  - local: protoc-gen-codesjoy-event
+    out: ./examples/protobuf/gen/codesjoy_event
+    opt:
+      - paths=source_relative

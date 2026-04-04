@@ -32,9 +32,39 @@ PROTOBUF_BUF_TOOL = {
     },
 }
 
+PROTOBUF_PKG_SOURCE = {
+    "default_commit": "9bfa697c14eeb20cfd5b7193e459525459e08406",
+    "url": "https://codeload.github.com/codesjoy/pkg/tar.gz/9bfa697c14eeb20cfd5b7193e459525459e08406",
+    "sha256": "f0e0ce906fc04f2ae8263d5e6caefb7bb58f46600d91426be87163ae4132f01c",
+    "strip_prefix": "pkg-9bfa697c14eeb20cfd5b7193e459525459e08406",
+}
+
+PROTOBUF_PLUGIN_TOOL_DEFINITIONS = {
+    "codesjoy_event": {
+        "repo": "protobuf_tool_protoc_gen_codesjoy_event",
+        "binary_name": "protoc-gen-codesjoy-event",
+        "subdir": "tools/protoc-gen-codesjoy-event",
+    },
+    "codesjoy_reason": {
+        "repo": "protobuf_tool_protoc_gen_codesjoy_reason",
+        "binary_name": "protoc-gen-codesjoy-reason",
+        "subdir": "tools/protoc-gen-codesjoy-reason",
+    },
+    "google_aip": {
+        "repo": "protobuf_tool_protoc_gen_google_aip",
+        "binary_name": "protoc-gen-google-aip",
+        "subdir": "tools/protoc-gen-google-aip",
+    },
+}
+
 def protobuf_buf_repo_name():
     return PROTOBUF_BUF_TOOL["repo"]
 
 def protobuf_buf_default_version():
     return PROTOBUF_BUF_TOOL["default_version"]
 
+def protobuf_plugin_repo_name(plugin):
+    return PROTOBUF_PLUGIN_TOOL_DEFINITIONS[plugin]["repo"]
+
+def protobuf_default_pkg_commit():
+    return PROTOBUF_PKG_SOURCE["default_commit"]

@@ -1,0 +1,20 @@
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+package(default_visibility = ["//visibility:public"])
+
+sh_test(
+    name = "runner_text_test",
+    srcs = ["runner_text_test.sh"],
+    data = [
+        "//rules/modelgen:defs.bzl",
+        "//rules/modelgen:extensions.bzl",
+        ":launcher.bzl",
+        "//tools/modelgen:versions.bzl",
+    ],
+    args = [
+        "$(location //rules/modelgen:defs.bzl)",
+        "$(location //rules/modelgen:extensions.bzl)",
+        "$(location :launcher.bzl)",
+        "$(location //tools/modelgen:versions.bzl)",
+    ],
+)

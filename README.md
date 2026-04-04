@@ -12,7 +12,11 @@ The repository is organized around capability-focused, runnable workflows rather
 
 ### `protobuf`
 
-`protobuf` manages protobuf workflows with Buf as the control plane. It is intentionally workflow-oriented: formatting, linting, breaking checks, code generation, and dependency lock updates. It does not try to wrap Bazel's `proto_library` graph in v1. Read [docs/protobuf.md](docs/protobuf.md) and inspect [examples/protobuf](examples/protobuf).
+`protobuf` manages protobuf workflows with Buf as the control plane. It is intentionally workflow-oriented: formatting, linting, breaking checks, code generation, dependency lock updates, and Bazel-managed codesjoy protoc plugins. It does not try to wrap Bazel's `proto_library` graph in v1. Read [docs/protobuf.md](docs/protobuf.md) and inspect [examples/protobuf](examples/protobuf).
+
+### `modelgen`
+
+`modelgen` manages the `codesjoy-modelgen` binary from `github.com/codesjoy/pkg/tools` and exposes a runnable Bazel rule for database-driven GORM model generation. It is intentionally separate from `protobuf` because it is not a codegen plugin and requires a live database at execution time. Read [docs/modelgen.md](docs/modelgen.md) and inspect [examples/modelgen](examples/modelgen).
 
 ### `workspace`
 
@@ -27,7 +31,16 @@ quality_tools = use_extension("@codesjoy_bazel_kit//rules/quality:extensions.bzl
 quality_tools.install(domains = ["go", "shell"])
 
 protobuf_tools = use_extension("@codesjoy_bazel_kit//rules/protobuf:extensions.bzl", "protobuf_tools")
-protobuf_tools.install()
+protobuf_tools.install(
+    plugins = [
+        "codesjoy_event",
+        "codesjoy_reason",
+        "google_aip",
+    ],
+)
+
+modelgen_tools = use_extension("@codesjoy_bazel_kit//rules/modelgen:extensions.bzl", "modelgen_tools")
+modelgen_tools.install()
 
 use_repo(
     quality_tools,
@@ -42,6 +55,14 @@ use_repo(
 use_repo(
     protobuf_tools,
     "protobuf_tool_buf",
+    "protobuf_tool_protoc_gen_codesjoy_event",
+    "protobuf_tool_protoc_gen_codesjoy_reason",
+    "protobuf_tool_protoc_gen_google_aip",
+)
+
+use_repo(
+    modelgen_tools,
+    "modelgen_tool_codesjoy_modelgen",
 )
 ```
 
@@ -50,6 +71,7 @@ From there, load the rule entrypoints you need:
 - `@codesjoy_bazel_kit//rules/quality:go.bzl`
 - `@codesjoy_bazel_kit//rules/quality:shell.bzl`
 - `@codesjoy_bazel_kit//rules/protobuf:buf.bzl`
+- `@codesjoy_bazel_kit//rules/modelgen:defs.bzl`
 - `@codesjoy_bazel_kit//rules/workspace:defs.bzl`
 
 ## Capability Matrix
@@ -57,7 +79,8 @@ From there, load the rule entrypoints you need:
 | Capability | Public entrypoints | Managed tools | Writes source tree? | Host prerequisites | Example targets |
 | --- | --- | --- | --- | --- | --- |
 | `quality` | `go_fmt`, `go_fmt_check`, `go_lint`, `shell_lint` | `gofumpt`, `goimports`, `golines`, `golangci-lint`, `shfmt`, optional `shellcheck` | `go_fmt` writes source files; the check and lint rules do not | No separate formatter/linter install is required | `//examples/quality/go:fmt`, `//examples/quality/go:fmt_check`, `//examples/quality/go:lint`, `//examples/quality/shell:lint` |
-| `protobuf` | `buf_format`, `buf_format_check`, `buf_lint`, `buf_breaking`, `buf_generate`, `buf_dep_update` | `buf` | `buf_format`, `buf_generate`, and `buf_dep_update` write the source workspace | `git` is required only for the default `buf_breaking` mode; plugin execution remains the caller's responsibility | `//examples/protobuf:format`, `//examples/protobuf:lint`, `//examples/protobuf:breaking`, `//examples/protobuf:generate`, `//examples/protobuf:dep_update` |
+| `protobuf` | `buf_format`, `buf_format_check`, `buf_lint`, `buf_breaking`, `buf_generate`, `buf_dep_update` | `buf`, `protoc-gen-codesjoy-event`, `protoc-gen-codesjoy-reason`, `protoc-gen-google-aip` | `buf_format`, `buf_generate`, and `buf_dep_update` write the source workspace | `git` is required only for the default `buf_breaking` mode; plugin inputs and plugin-selected templates remain the caller's responsibility | `//examples/protobuf:generate_codesjoy_event`, `//examples/protobuf:generate_codesjoy_reason`, `//examples/protobuf:generate_google_aip` |
+| `modelgen` | `codesjoy_modelgen` | `codesjoy-modelgen` | yes | a reachable database is required when the target is actually run | `//examples/modelgen:generate_models` |
 | `workspace` | `workspace_sync` | none | yes; it rewrites `go.work` and may trigger follow-up commands that write files | `go`, `bazel`, and whatever the optional follow-up target requires | `//examples/workspace:sync` |
 
 ## Design Conventions
@@ -71,6 +94,7 @@ From there, load the rule entrypoints you need:
 
 - [docs/quality.md](docs/quality.md): design, Bzlmod wiring, rule reference, and operational guidance for Go and shell quality workflows
 - [docs/protobuf.md](docs/protobuf.md): design rationale for Buf-managed protobuf workflows, rule reference, examples, and troubleshooting
+- [docs/modelgen.md](docs/modelgen.md): design, tool pinning, rule reference, and operational notes for `codesjoy-modelgen`
 - [docs/workspace.md](docs/workspace.md): design and operational guide for `workspace_sync`
 
 ## Example Map
@@ -78,4 +102,5 @@ From there, load the rule entrypoints you need:
 - [examples/quality/go](examples/quality/go): `go_fmt`, `go_fmt_check`, and `go_lint`
 - [examples/quality/shell](examples/quality/shell): `shell_lint`
 - [examples/protobuf](examples/protobuf): Buf formatting, linting, breaking, generate, and dep update workflows
+- [examples/modelgen](examples/modelgen): launcher wiring for `codesjoy-modelgen`
 - [examples/workspace](examples/workspace): `workspace_sync` with a follow-up executable target

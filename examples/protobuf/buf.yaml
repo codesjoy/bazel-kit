@@ -1,6 +1,10 @@
 version: v2
 modules:
   - path: proto
+deps:
+  - buf.build/codesjoy/ddd
+  - buf.build/codesjoy/reason
+  - buf.build/googleapis/googleapis
 lint:
   use:
     - STANDARD

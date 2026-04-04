@@ -1,6 +1,6 @@
 # quality
 
-`quality` provides public code-quality helpers for Go and shell.
+`quality` provides public code-quality helpers for Go, shell, and stable web frontend files.
 
 The capability is deliberately scoped to formatting and linting workflows. It manages the tool binaries through Bzlmod, exposes a small runnable rule surface, and leaves project-specific policy in the caller's config files and module layout.
 
@@ -9,10 +9,12 @@ The capability is deliberately scoped to formatting and linting workflows. It ma
 - Public entrypoints:
   - `@codesjoy_bazel_kit//rules/quality:go.bzl`
   - `@codesjoy_bazel_kit//rules/quality:shell.bzl`
+  - `@codesjoy_bazel_kit//rules/quality:web.bzl`
 - Managed tool extension: `quality_tools`
 - Example workspaces:
   - [`examples/quality/go`](../examples/quality/go)
   - [`examples/quality/shell`](../examples/quality/shell)
+  - [`examples/quality/web`](../examples/quality/web)
 
 ## Design And Rationale
 
@@ -41,10 +43,11 @@ That is why the public API is intentionally small and capability-centered.
 
 ```starlark
 quality_tools = use_extension("@codesjoy_bazel_kit//rules/quality:extensions.bzl", "quality_tools")
-quality_tools.install(domains = ["go", "shell"])
+quality_tools.install(domains = ["go", "shell", "web"])
 
 use_repo(
     quality_tools,
+    "quality_tool_biome",
     "quality_tool_gofumpt",
     "quality_tool_goimports",
     "quality_tool_golangci_lint",
@@ -70,12 +73,14 @@ If `shellcheck = True`, the `shell` domain must be enabled.
 ```starlark
 quality_tools.override(domain = "go", name = "gofumpt", version = "v0.9.2")
 quality_tools.override(domain = "shell", name = "shfmt", version = "v3.13.0")
+quality_tools.override(domain = "web", name = "biome", version = "v2.4.10")
 ```
 
 Overrides are validated against the versions committed in:
 
 - [`tools/quality/go/versions.bzl`](../tools/quality/go/versions.bzl)
 - [`tools/quality/shell/versions.bzl`](../tools/quality/shell/versions.bzl)
+- [`tools/quality/web/versions.bzl`](../tools/quality/web/versions.bzl)
 
 They are curated overrides, not arbitrary upstream version passthrough.
 
@@ -89,6 +94,7 @@ They are curated overrides, not arbitrary upstream version passthrough.
 | `go` | `golangci-lint` | `v2.11.4` | prebuilt archive |
 | `shell` | `shfmt` | `v3.13.0` | always installed when the shell domain is enabled |
 | `shell` | `shellcheck` | `v0.11.0` | optional; defaults to a warning wrapper unless explicitly enabled |
+| `web` | `biome` | `v2.4.10` | standalone binary |
 
 ### Host Expectations
 
@@ -252,3 +258,72 @@ quality_tools.install(domains = ["shell"], shellcheck = True)
 ```
 
 or include `shell` alongside any other enabled domains.
+
+### Web Rules
+
+Load from:
+
+```starlark
+load("@codesjoy_bazel_kit//rules/quality:web.bzl", "web_fmt", "web_fmt_check", "web_lint")
+```
+
+| Rule | Required attrs | Optional attrs | Writes source tree? | Behavior |
+| --- | --- | --- | --- | --- |
+| `web_fmt` | `project_dir` | `paths` | yes | Runs `biome format --write` |
+| `web_fmt_check` | `project_dir` | `paths` | no | Runs `biome format` in check mode |
+| `web_lint` | `project_dir` | `paths` | no | Runs `biome lint --error-on-warnings` |
+
+`project_dir` is always interpreted relative to `BUILD_WORKSPACE_DIRECTORY`.
+
+If `paths` is omitted, the launcher discovers stable frontend file types under `project_dir`:
+
+- `*.js`
+- `*.jsx`
+- `*.ts`
+- `*.tsx`
+- `*.json`
+- `*.jsonc`
+- `*.css`
+- `*.html`
+
+Discovery excludes:
+
+- `node_modules/`
+- `dist/`
+- `coverage/`
+- `.git/`
+- `.pnpm-store/`
+- `bazel-*`
+
+`.vue`, `.svelte`, and `.astro` are intentionally out of scope in v1.
+
+### Minimal Web Setup
+
+```starlark
+load("@codesjoy_bazel_kit//rules/quality:web.bzl", "web_fmt", "web_fmt_check", "web_lint")
+
+web_fmt(
+    name = "fmt",
+    project_dir = "apps/web",
+)
+
+web_fmt_check(
+    name = "fmt_check",
+    project_dir = "apps/web",
+)
+
+web_lint(
+    name = "lint",
+    project_dir = "apps/web",
+)
+```
+
+Web example BUILD file:
+
+- [`examples/quality/web/BUILD.bazel`](../examples/quality/web/BUILD.bazel)
+
+Example targets:
+
+- `//examples/quality/web:fmt`
+- `//examples/quality/web:fmt_check`
+- `//examples/quality/web:lint`

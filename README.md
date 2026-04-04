@@ -8,7 +8,11 @@ The repository is organized around capability-focused, runnable workflows rather
 
 ### `quality`
 
-`quality` manages code-quality workflows for Go and shell. It installs formatter and linter binaries through `quality_tools`, exposes small runnable rules such as `go_fmt` and `shell_lint`, and keeps the build-facing API intentionally narrow. Read [docs/quality.md](docs/quality.md) and inspect [examples/quality/go](examples/quality/go) plus [examples/quality/shell](examples/quality/shell).
+`quality` manages code-quality workflows for Go, shell, and stable web frontend files. It installs formatter and linter binaries through `quality_tools`, exposes small runnable rules such as `go_fmt`, `shell_lint`, and `web_lint`, and keeps the build-facing API intentionally narrow. Read [docs/quality.md](docs/quality.md) and inspect [examples/quality/go](examples/quality/go), [examples/quality/shell](examples/quality/shell), and [examples/quality/web](examples/quality/web).
+
+### `web`
+
+`web` manages a frontend workflow around Vite + TypeScript. It provisions Node and pnpm through `web_tools`, exposes runnable rules such as `web_init`, `web_install`, `web_build`, `web_typecheck`, `web_test`, `web_browser_install`, and `web_e2e`, and keeps app-specific policy in the generated project files. Read [docs/web.md](docs/web.md) and inspect [examples/web/vite](examples/web/vite).
 
 ### `protobuf`
 
@@ -28,7 +32,10 @@ The repository is organized around capability-focused, runnable workflows rather
 bazel_dep(name = "codesjoy_bazel_kit", version = "0.2.0")
 
 quality_tools = use_extension("@codesjoy_bazel_kit//rules/quality:extensions.bzl", "quality_tools")
-quality_tools.install(domains = ["go", "shell"])
+quality_tools.install(domains = ["go", "shell", "web"])
+
+web_tools = use_extension("@codesjoy_bazel_kit//rules/web:extensions.bzl", "web_tools")
+web_tools.install()
 
 protobuf_tools = use_extension("@codesjoy_bazel_kit//rules/protobuf:extensions.bzl", "protobuf_tools")
 protobuf_tools.install(
@@ -44,12 +51,19 @@ modelgen_tools.install()
 
 use_repo(
     quality_tools,
+    "quality_tool_biome",
     "quality_tool_gofumpt",
     "quality_tool_goimports",
     "quality_tool_golangci_lint",
     "quality_tool_golines",
     "quality_tool_shellcheck",
     "quality_tool_shfmt",
+)
+
+use_repo(
+    web_tools,
+    "web_tool_node",
+    "web_tool_pnpm",
 )
 
 use_repo(
@@ -70,6 +84,8 @@ From there, load the rule entrypoints you need:
 
 - `@codesjoy_bazel_kit//rules/quality:go.bzl`
 - `@codesjoy_bazel_kit//rules/quality:shell.bzl`
+- `@codesjoy_bazel_kit//rules/quality:web.bzl`
+- `@codesjoy_bazel_kit//rules/web:defs.bzl`
 - `@codesjoy_bazel_kit//rules/protobuf:buf.bzl`
 - `@codesjoy_bazel_kit//rules/modelgen:defs.bzl`
 - `@codesjoy_bazel_kit//rules/workspace:defs.bzl`
@@ -78,7 +94,8 @@ From there, load the rule entrypoints you need:
 
 | Capability | Public entrypoints | Managed tools | Writes source tree? | Host prerequisites | Example targets |
 | --- | --- | --- | --- | --- | --- |
-| `quality` | `go_fmt`, `go_fmt_check`, `go_lint`, `shell_lint` | `gofumpt`, `goimports`, `golines`, `golangci-lint`, `shfmt`, optional `shellcheck` | `go_fmt` writes source files; the check and lint rules do not | No separate formatter/linter install is required | `//examples/quality/go:fmt`, `//examples/quality/go:fmt_check`, `//examples/quality/go:lint`, `//examples/quality/shell:lint` |
+| `quality` | `go_fmt`, `go_fmt_check`, `go_lint`, `shell_lint`, `web_fmt`, `web_fmt_check`, `web_lint` | `gofumpt`, `goimports`, `golines`, `golangci-lint`, `shfmt`, optional `shellcheck`, `biome` | `go_fmt` and `web_fmt` write source files; the check and lint rules do not | No separate formatter/linter install is required | `//examples/quality/go:fmt`, `//examples/quality/go:fmt_check`, `//examples/quality/go:lint`, `//examples/quality/shell:lint`, `//examples/quality/web:lint` |
+| `web` | `web_init`, `web_install`, `web_dev`, `web_build`, `web_preview`, `web_typecheck`, `web_test`, `web_browser_install`, `web_e2e` | `node`, `pnpm` | `web_init`, `web_install`, `web_build`, and `web_browser_install` write the source workspace or local tool cache directories | No separate Node or pnpm install is required | `//examples/web/vite:install`, `//examples/web/vite:build`, `//examples/web/vite:typecheck`, `//examples/web/vite:test`, `//examples/web/vite:e2e` |
 | `protobuf` | `buf_format`, `buf_format_check`, `buf_lint`, `buf_breaking`, `buf_generate`, `buf_dep_update` | `buf`, `protoc-gen-codesjoy-event`, `protoc-gen-codesjoy-reason`, `protoc-gen-google-aip` | `buf_format`, `buf_generate`, and `buf_dep_update` write the source workspace | `git` is required only for the default `buf_breaking` mode; plugin inputs and plugin-selected templates remain the caller's responsibility | `//examples/protobuf:generate_codesjoy_event`, `//examples/protobuf:generate_codesjoy_reason`, `//examples/protobuf:generate_google_aip` |
 | `modelgen` | `codesjoy_modelgen` | `codesjoy-modelgen` | yes | a reachable database is required when the target is actually run | `//examples/modelgen:generate_models` |
 | `workspace` | `workspace_sync` | none | yes; it rewrites `go.work` and may trigger follow-up commands that write files | `go`, `bazel`, and whatever the optional follow-up target requires | `//examples/workspace:sync` |
@@ -92,7 +109,8 @@ From there, load the rule entrypoints you need:
 
 ## Documentation Map
 
-- [docs/quality.md](docs/quality.md): design, Bzlmod wiring, rule reference, and operational guidance for Go and shell quality workflows
+- [docs/quality.md](docs/quality.md): design, Bzlmod wiring, rule reference, and operational guidance for Go, shell, and web quality workflows
+- [docs/web.md](docs/web.md): design, runtime pinning, rule reference, generated starter shape, and operational guidance for frontend workflows
 - [docs/protobuf.md](docs/protobuf.md): design rationale for Buf-managed protobuf workflows, rule reference, examples, and troubleshooting
 - [docs/modelgen.md](docs/modelgen.md): design, tool pinning, rule reference, and operational notes for `codesjoy-modelgen`
 - [docs/workspace.md](docs/workspace.md): design and operational guide for `workspace_sync`
@@ -101,6 +119,8 @@ From there, load the rule entrypoints you need:
 
 - [examples/quality/go](examples/quality/go): `go_fmt`, `go_fmt_check`, and `go_lint`
 - [examples/quality/shell](examples/quality/shell): `shell_lint`
+- [examples/quality/web](examples/quality/web): `web_fmt`, `web_fmt_check`, and `web_lint`
+- [examples/web/vite](examples/web/vite): `web_install`, `web_build`, `web_typecheck`, `web_test`, `web_browser_install`, and `web_e2e`
 - [examples/protobuf](examples/protobuf): Buf formatting, linting, breaking, generate, and dep update workflows
 - [examples/modelgen](examples/modelgen): launcher wiring for `codesjoy-modelgen`
 - [examples/workspace](examples/workspace): `workspace_sync` with a follow-up executable target

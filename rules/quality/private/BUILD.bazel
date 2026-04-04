@@ -35,3 +35,20 @@ sh_test(
         "$(location //tools/quality/shell:versions.bzl)",
     ],
 )
+
+sh_test(
+    name = "web_runner_text_test",
+    srcs = ["web_runner_text_test.sh"],
+    data = [
+        "//rules/quality:web.bzl",
+        "//rules/quality:extensions.bzl",
+        ":web_launcher.bzl",
+        "//tools/quality/web:versions.bzl",
+    ],
+    args = [
+        "$(location //rules/quality:web.bzl)",
+        "$(location //rules/quality:extensions.bzl)",
+        "$(location :web_launcher.bzl)",
+        "$(location //tools/quality/web:versions.bzl)",
+    ],
+)

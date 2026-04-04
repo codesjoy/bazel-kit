@@ -1,0 +1,108 @@
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//rules/web:defs.bzl", "web_browser_install", "web_build", "web_e2e", "web_init", "web_install", "web_test", "web_typecheck")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "fake_node",
+    srcs = ["testdata/node"],
+)
+
+filegroup(
+    name = "fake_pnpm",
+    srcs = glob(["testdata/pnpm/**"], exclude_directories = 1),
+)
+
+web_init(
+    name = "init_test_launcher",
+    project_dir = "apps/demo",
+    package_name = "demo-app",
+    tool_pnpm = ":fake_pnpm",
+)
+
+web_install(
+    name = "install_smoke_launcher",
+    project_dir = "apps/demo",
+    tool_node = ":fake_node",
+    tool_pnpm = ":fake_pnpm",
+)
+
+web_typecheck(
+    name = "typecheck_smoke_launcher",
+    project_dir = "apps/demo",
+    tool_node = ":fake_node",
+    tool_pnpm = ":fake_pnpm",
+)
+
+web_test(
+    name = "test_smoke_launcher",
+    project_dir = "apps/demo",
+    tool_node = ":fake_node",
+    tool_pnpm = ":fake_pnpm",
+)
+
+web_build(
+    name = "build_smoke_launcher",
+    project_dir = "apps/demo",
+    tool_node = ":fake_node",
+    tool_pnpm = ":fake_pnpm",
+)
+
+web_browser_install(
+    name = "browser_install_smoke_launcher",
+    project_dir = "apps/demo",
+    tool_node = ":fake_node",
+    tool_pnpm = ":fake_pnpm",
+)
+
+web_e2e(
+    name = "e2e_smoke_launcher",
+    project_dir = "apps/demo",
+    tool_node = ":fake_node",
+    tool_pnpm = ":fake_pnpm",
+)
+
+sh_test(
+    name = "runner_text_test",
+    srcs = ["runner_text_test.sh"],
+    data = [
+        "//rules/web:defs.bzl",
+        "//rules/web:extensions.bzl",
+        ":launcher.bzl",
+        "//tools/web/runtime:versions.bzl",
+    ],
+    args = [
+        "$(location //rules/web:defs.bzl)",
+        "$(location //rules/web:extensions.bzl)",
+        "$(location :launcher.bzl)",
+        "$(location //tools/web/runtime:versions.bzl)",
+    ],
+)
+
+sh_test(
+    name = "init_integration_test",
+    srcs = ["init_integration_test.sh"],
+    data = [":init_test_launcher"],
+    args = ["$(location :init_test_launcher)"],
+)
+
+sh_test(
+    name = "smoke_test",
+    srcs = ["smoke_test.sh"],
+    data = [
+        ":install_smoke_launcher",
+        ":typecheck_smoke_launcher",
+        ":test_smoke_launcher",
+        ":build_smoke_launcher",
+        ":browser_install_smoke_launcher",
+        ":e2e_smoke_launcher",
+    ],
+    args = [
+        "$(location :install_smoke_launcher)",
+        "$(location :typecheck_smoke_launcher)",
+        "$(location :test_smoke_launcher)",
+        "$(location :build_smoke_launcher)",
+        "$(location :browser_install_smoke_launcher)",
+        "$(location :e2e_smoke_launcher)",
+    ],
+)

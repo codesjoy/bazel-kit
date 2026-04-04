@@ -26,7 +26,7 @@ assert_not_contains() {
 
 assert_contains "$defs_file" 'def shell_lint('
 assert_contains "$extensions_file" 'quality_tools = module_extension('
-assert_contains "$extensions_file" 'attr.string_list(default = ["go", "shell"])'
+assert_contains "$extensions_file" '_DEFAULT_INSTALL_DOMAINS = ["go", "shell"]'
 assert_contains "$extensions_file" 'requires shell domain in install domains'
 assert_contains "$launcher_file" 'tool_shfmt'
 assert_contains "$launcher_file" 'tool_shellcheck'

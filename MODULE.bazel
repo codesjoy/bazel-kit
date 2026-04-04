@@ -12,7 +12,10 @@ go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")
 go_sdk.download(version = "1.25.8")
 
 quality_tools = use_extension("//rules/quality:extensions.bzl", "quality_tools")
-quality_tools.install(domains = ["go", "shell"])
+quality_tools.install(domains = ["go", "shell", "web"])
+
+web_tools = use_extension("//rules/web:extensions.bzl", "web_tools")
+web_tools.install()
 
 protobuf_tools = use_extension("//rules/protobuf:extensions.bzl", "protobuf_tools")
 protobuf_tools.install(
@@ -28,12 +31,19 @@ modelgen_tools.install()
 
 use_repo(
     quality_tools,
+    "quality_tool_biome",
     "quality_tool_gofumpt",
     "quality_tool_goimports",
     "quality_tool_golangci_lint",
     "quality_tool_golines",
     "quality_tool_shellcheck",
     "quality_tool_shfmt",
+)
+
+use_repo(
+    web_tools,
+    "web_tool_node",
+    "web_tool_pnpm",
 )
 
 use_repo(

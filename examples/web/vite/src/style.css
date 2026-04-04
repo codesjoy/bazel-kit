@@ -1,0 +1,26 @@
+:root {
+  color: #111827;
+  font-family: "Helvetica Neue", sans-serif;
+  background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+#app {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+}
+
+button {
+  border: 0;
+  border-radius: 999px;
+  background: #0f172a;
+  color: #f8fafc;
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 0.85rem 1.4rem;
+}

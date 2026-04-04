@@ -1,0 +1,22 @@
+load("//rules/quality:web.bzl", "web_fmt", "web_fmt_check", "web_lint")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "biome.json",
+])
+
+web_fmt(
+    name = "fmt",
+    project_dir = "examples/quality/web",
+)
+
+web_fmt_check(
+    name = "fmt_check",
+    project_dir = "examples/quality/web",
+)
+
+web_lint(
+    name = "lint",
+    project_dir = "examples/quality/web",
+)

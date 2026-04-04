@@ -2,12 +2,24 @@ load("//tools/quality/go:repositories.bzl", "quality_go_binary_tool_repository",
 load("//tools/quality/go:versions.bzl", "QUALITY_GO_DEFAULT_ENABLED_TOOLS", "QUALITY_GO_TOOL_DEFINITIONS", "quality_go_default_version", "quality_go_repo_name")
 load("//tools/quality/shell:repositories.bzl", "quality_shell_binary_tool_repository")
 load("//tools/quality/shell:versions.bzl", "QUALITY_SHELL_DEFAULT_ENABLED_TOOLS", "QUALITY_SHELL_TOOL_DEFINITIONS", "quality_shell_default_version", "quality_shell_repo_name")
+load("//tools/quality/web:repositories.bzl", "quality_web_binary_tool_repository")
+load("//tools/quality/web:versions.bzl", "QUALITY_WEB_DEFAULT_ENABLED_TOOLS", "QUALITY_WEB_TOOL_DEFINITIONS", "quality_web_default_version", "quality_web_repo_name")
 
-_VALID_DOMAINS = ["go", "shell"]
+_VALID_DOMAINS = ["go", "shell", "web"]
+_DEFAULT_INSTALL_DOMAINS = ["go", "shell"]
 
 def _validate_domain(domain, context):
     if domain not in _VALID_DOMAINS:
         fail("unknown quality %s domain: %s" % (context, domain))
+
+def _definitions_for_domain(domain):
+    if domain == "go":
+        return QUALITY_GO_TOOL_DEFINITIONS
+    if domain == "shell":
+        return QUALITY_SHELL_TOOL_DEFINITIONS
+    if domain == "web":
+        return QUALITY_WEB_TOOL_DEFINITIONS
+    fail("unsupported quality domain: %s" % domain)
 
 def _collect_install_settings(module_ctx):
     enabled_domains = {}
@@ -23,7 +35,7 @@ def _collect_install_settings(module_ctx):
             shellcheck_enabled = shellcheck_enabled or install.shellcheck
 
     if not install_seen:
-        for domain in _VALID_DOMAINS:
+        for domain in _DEFAULT_INSTALL_DOMAINS:
             enabled_domains[domain] = True
 
     if shellcheck_enabled and not enabled_domains.get("shell"):
@@ -37,7 +49,7 @@ def _collect_overrides(module_ctx):
     for module in module_ctx.modules:
         for override in module.tags.override:
             _validate_domain(override.domain, "override")
-            definitions = QUALITY_GO_TOOL_DEFINITIONS if override.domain == "go" else QUALITY_SHELL_TOOL_DEFINITIONS
+            definitions = _definitions_for_domain(override.domain)
             if override.name not in definitions:
                 fail("unknown quality tool override for %s: %s" % (override.domain, override.name))
 
@@ -92,6 +104,20 @@ def _declare_shell_repos(overrides, shellcheck_enabled):
 
     return repos
 
+def _declare_web_repos(overrides):
+    repos = []
+    web_overrides = overrides.get("web", {})
+
+    for tool in QUALITY_WEB_DEFAULT_ENABLED_TOOLS:
+        quality_web_binary_tool_repository(
+            name = quality_web_repo_name(tool),
+            tool = tool,
+            version = web_overrides.get(tool, quality_web_default_version(tool)),
+        )
+        repos.append(quality_web_repo_name(tool))
+
+    return repos
+
 def _quality_tools_impl(module_ctx):
     enabled_domains, shellcheck_enabled = _collect_install_settings(module_ctx)
     overrides = _collect_overrides(module_ctx)
@@ -101,6 +127,8 @@ def _quality_tools_impl(module_ctx):
         repos.extend(_declare_go_repos(overrides))
     if enabled_domains.get("shell"):
         repos.extend(_declare_shell_repos(overrides, shellcheck_enabled))
+    if enabled_domains.get("web"):
+        repos.extend(_declare_web_repos(overrides))
 
     return module_ctx.extension_metadata(
         root_module_direct_deps = repos,
@@ -110,7 +138,7 @@ def _quality_tools_impl(module_ctx):
 
 _install_tag = tag_class(
     attrs = {
-        "domains": attr.string_list(default = ["go", "shell"]),
+        "domains": attr.string_list(default = _DEFAULT_INSTALL_DOMAINS),
         "shellcheck": attr.bool(default = False),
     },
 )

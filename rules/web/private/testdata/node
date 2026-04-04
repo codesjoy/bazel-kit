@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ -n "${WEB_SMOKE_LOG:-}" ]]; then
+  {
+    printf 'PWD=%s\n' "$PWD"
+    printf 'PLAYWRIGHT_BROWSERS_PATH=%s\n' "${PLAYWRIGHT_BROWSERS_PATH:-}"
+    for arg in "$@"; do
+      printf 'ARG=%s\n' "$arg"
+    done
+    printf '%s\n' '---'
+  } >>"$WEB_SMOKE_LOG"
+fi
+
+args=("$@")
+limit=$((${#args[@]} - 1))
+for ((i = 0; i < limit; i++)); do
+  if [[ "${args[i]}" == "playwright" && "${args[i + 1]}" == "install" ]]; then
+    mkdir -p "${PLAYWRIGHT_BROWSERS_PATH}/chromium-stub"
+  fi
+done

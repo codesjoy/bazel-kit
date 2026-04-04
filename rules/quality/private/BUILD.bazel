@@ -1,0 +1,37 @@
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+package(default_visibility = ["//visibility:public"])
+
+sh_test(
+    name = "go_runner_text_test",
+    srcs = ["go_runner_text_test.sh"],
+    data = [
+        "//rules/quality:go.bzl",
+        "//rules/quality:extensions.bzl",
+        ":go_launcher.bzl",
+        "//tools/quality/go:versions.bzl",
+    ],
+    args = [
+        "$(location //rules/quality:go.bzl)",
+        "$(location //rules/quality:extensions.bzl)",
+        "$(location :go_launcher.bzl)",
+        "$(location //tools/quality/go:versions.bzl)",
+    ],
+)
+
+sh_test(
+    name = "shell_runner_text_test",
+    srcs = ["shell_runner_text_test.sh"],
+    data = [
+        "//rules/quality:shell.bzl",
+        "//rules/quality:extensions.bzl",
+        ":shell_launcher.bzl",
+        "//tools/quality/shell:versions.bzl",
+    ],
+    args = [
+        "$(location //rules/quality:shell.bzl)",
+        "$(location //rules/quality:extensions.bzl)",
+        "$(location :shell_launcher.bzl)",
+        "$(location //tools/quality/shell:versions.bzl)",
+    ],
+)

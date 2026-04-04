@@ -1,0 +1,26 @@
+load("//rules/quality:go.bzl", "go_fmt", "go_fmt_check", "go_lint")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    ".golangci.yaml",
+    "go.mod",
+])
+
+go_fmt(
+    name = "fmt",
+    files = ["main.go"],
+    local_prefix = "github.com/codesjoy/bazel-kit/examples/quality/go",
+)
+
+go_fmt_check(
+    name = "fmt_check",
+    files = ["main.go"],
+    local_prefix = "github.com/codesjoy/bazel-kit/examples/quality/go",
+)
+
+go_lint(
+    name = "lint",
+    modules = ["go.mod"],
+    config = ":.golangci.yaml",
+)

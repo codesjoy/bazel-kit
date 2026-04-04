@@ -1,0 +1,17 @@
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+package(default_visibility = ["//visibility:public"])
+
+sh_test(
+    name = "runner_text_test",
+    srcs = ["runner_text_test.sh"],
+    data = [
+        "//rules/workspace:defs.bzl",
+        ":launcher.bzl",
+    ],
+    args = [
+        "$(location //rules/workspace:defs.bzl)",
+        "$(location :launcher.bzl)",
+    ],
+)
+

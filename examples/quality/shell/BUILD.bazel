@@ -1,0 +1,8 @@
+load("//rules/quality:shell.bzl", "shell_lint")
+
+package(default_visibility = ["//visibility:public"])
+
+shell_lint(
+    name = "lint",
+    scripts = ["demo.sh"],
+)

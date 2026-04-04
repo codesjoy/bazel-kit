@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package acme.weather.v1;
+
+message ForecastRequest {
+  string city = 1;
+}
+
+message ForecastResponse {
+  string summary = 1;
+}

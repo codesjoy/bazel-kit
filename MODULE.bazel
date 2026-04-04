@@ -12,10 +12,11 @@ go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")
 go_sdk.download(version = "1.25.8")
 
 quality_tools = use_extension("//rules/quality:extensions.bzl", "quality_tools")
-quality_tools.install(domains = [
-    "go",
-    "shell",
-])
+quality_tools.install(domains = ["go", "shell"])
+
+protobuf_tools = use_extension("//rules/protobuf:extensions.bzl", "protobuf_tools")
+protobuf_tools.install()
+
 use_repo(
     quality_tools,
     "quality_tool_gofumpt",
@@ -24,4 +25,9 @@ use_repo(
     "quality_tool_golines",
     "quality_tool_shellcheck",
     "quality_tool_shfmt",
+)
+
+use_repo(
+    protobuf_tools,
+    "protobuf_tool_buf",
 )

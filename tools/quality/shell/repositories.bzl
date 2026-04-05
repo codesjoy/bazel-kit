@@ -16,7 +16,7 @@ def _binary_tool_repository_impl(repository_ctx):
         write_disabled_tool(
             repository_ctx,
             "shellcheck.cmd" if platform_key(repository_ctx).startswith("windows_") else "shellcheck",
-            "shellcheck not configured, skipping shellcheck validation",
+            "shellcheck not configured, set QUALITY_SHELLCHECK_REQUIRED=1 to fail instead of warn",
         )
         return
 

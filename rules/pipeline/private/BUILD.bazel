@@ -1,5 +1,4 @@
-load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
-load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("@rules_go//go:def.bzl", "go_binary", "go_test")
 load("//rules/pipeline:defs.bzl", "pipeline_catalog", "pipeline_helm_render", "pipeline_plan", "pipeline_service")
 
 package(default_visibility = ["//visibility:public"])
@@ -30,97 +29,74 @@ filegroup(
     srcs = glob(["testdata/services/worker/**"]),
 )
 
-filegroup(
-    name = "plan_test_workspace",
-    srcs = [
-        "//:BUILD.bazel",
-        "//:MODULE.bazel",
-        "//:MODULE.bazel.lock",
-        "//rules/pipeline:BUILD.bazel",
-        "//rules/pipeline:defs.bzl",
-        "//rules/pipeline:extensions.bzl",
-        ":BUILD.bazel",
-        ":launcher.bzl",
-        ":plan_main.py",
-        ":render_main.py",
-    ] + glob(["testdata/**"]),
-)
-
-sh_test(
+go_test(
     name = "api_lint",
-    srcs = ["testdata/ok_test.sh"],
-    args = ["api-lint"],
+    srcs = ["ok_test.go"],
 )
 
-sh_test(
+go_test(
     name = "api_unit",
-    srcs = ["testdata/ok_test.sh"],
-    args = ["api-unit"],
+    srcs = ["ok_test.go"],
 )
 
-sh_test(
+go_test(
     name = "api_integration",
-    srcs = ["testdata/ok_test.sh"],
-    args = ["api-integration"],
+    srcs = ["ok_test.go"],
 )
 
-sh_binary(
+go_binary(
     name = "api_image",
-    srcs = ["testdata/noop_runner.sh"],
-    args = ["api-image"],
+    embed = ["//tools/testhelpers/fakecmd:fakecmd_lib"],
 )
 
-sh_test(
+go_test(
     name = "web_lint",
-    srcs = ["testdata/ok_test.sh"],
-    args = ["web-lint"],
+    srcs = ["ok_test.go"],
 )
 
-sh_test(
+go_test(
     name = "web_unit",
-    srcs = ["testdata/ok_test.sh"],
-    args = ["web-unit"],
+    srcs = ["ok_test.go"],
 )
 
-sh_test(
+go_test(
     name = "web_integration",
-    srcs = ["testdata/ok_test.sh"],
-    args = ["web-integration"],
+    srcs = ["ok_test.go"],
 )
 
-sh_binary(
+go_binary(
     name = "web_image",
-    srcs = ["testdata/noop_runner.sh"],
-    args = ["web-image"],
+    embed = ["//tools/testhelpers/fakecmd:fakecmd_lib"],
 )
 
-sh_test(
+go_test(
     name = "worker_lint",
-    srcs = ["testdata/ok_test.sh"],
-    args = ["worker-lint"],
+    srcs = ["ok_test.go"],
 )
 
-sh_test(
+go_test(
     name = "worker_unit",
-    srcs = ["testdata/ok_test.sh"],
-    args = ["worker-unit"],
+    srcs = ["ok_test.go"],
 )
 
-sh_test(
+go_test(
     name = "worker_integration",
-    srcs = ["testdata/ok_test.sh"],
-    args = ["worker-integration"],
+    srcs = ["ok_test.go"],
 )
 
-sh_binary(
+go_binary(
     name = "worker_image",
-    srcs = ["testdata/noop_runner.sh"],
-    args = ["worker-image"],
+    embed = ["//tools/testhelpers/fakecmd:fakecmd_lib"],
 )
 
-filegroup(
+go_binary(
     name = "fake_helm",
-    srcs = ["testdata/helm"],
+    embed = ["//tools/testhelpers/fakecmd:fakecmd_lib"],
+)
+
+go_binary(
+    name = "fake_bazel",
+    embed = ["//tools/testhelpers/fakecmd:fakecmd_lib"],
 )
 
 pipeline_helm_render(
@@ -202,9 +178,9 @@ pipeline_plan(
     catalog = ":catalog",
 )
 
-sh_test(
+go_test(
     name = "runner_text_test",
-    srcs = ["runner_text_test.sh"],
+    srcs = ["runner_text_test.go"],
     data = [
         "//rules/pipeline:defs.bzl",
         "//rules/pipeline:extensions.bzl",
@@ -221,21 +197,35 @@ sh_test(
         "$(location :render_main.py)",
         "$(location //tools/pipeline/helm:versions.bzl)",
     ],
+    deps = ["//tools/testhelpers/testutil"],
 )
 
-sh_test(
+go_test(
     name = "plan_smoke_test",
-    srcs = ["plan_smoke_test.sh"],
+    srcs = ["plan_smoke_test.go"],
     data = [
         ":plan_smoke_launcher",
-        ":plan_test_workspace",
+        ":fake_bazel",
+        "//:BUILD.bazel",
     ],
-    args = ["$(location :plan_smoke_launcher)"],
+    args = [
+        "$(location :plan_smoke_launcher)",
+        "$(location :fake_bazel)",
+        "$(location //:BUILD.bazel)",
+    ],
+    deps = ["//tools/testhelpers/testutil"],
 )
 
-sh_test(
+go_test(
     name = "render_smoke_test",
-    srcs = ["render_smoke_test.sh"],
-    data = [":api_render"],
-    args = ["$(location :api_render)"],
+    srcs = ["render_smoke_test.go"],
+    data = [
+        ":api_render",
+        "//:BUILD.bazel",
+    ],
+    args = [
+        "$(location :api_render)",
+        "$(location //:BUILD.bazel)",
+    ],
+    deps = ["//tools/testhelpers/testutil"],
 )

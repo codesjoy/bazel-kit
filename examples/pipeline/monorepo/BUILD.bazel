@@ -1,5 +1,4 @@
-load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
-load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("@rules_go//go:def.bzl", "go_binary", "go_test")
 load("//rules/pipeline:defs.bzl", "pipeline_catalog", "pipeline_helm_render", "pipeline_plan", "pipeline_service")
 
 package(default_visibility = ["//visibility:public"])
@@ -26,76 +25,64 @@ filegroup(
     srcs = glob(["services/worker/**"]),
 )
 
-sh_test(
+go_test(
     name = "api_lint",
-    srcs = ["scripts/ok_test.sh"],
-    args = ["api-lint"],
+    srcs = ["ok_test.go"],
 )
 
-sh_test(
+go_test(
     name = "api_unit",
-    srcs = ["scripts/ok_test.sh"],
-    args = ["api-unit"],
+    srcs = ["ok_test.go"],
 )
 
-sh_test(
+go_test(
     name = "api_integration",
-    srcs = ["scripts/ok_test.sh"],
-    args = ["api-integration"],
+    srcs = ["ok_test.go"],
 )
 
-sh_binary(
+go_binary(
     name = "api_image",
-    srcs = ["scripts/image_runner.sh"],
-    args = ["api"],
+    embed = ["//tools/testhelpers/fakecmd:fakecmd_lib"],
 )
 
-sh_test(
+go_test(
     name = "web_lint",
-    srcs = ["scripts/ok_test.sh"],
-    args = ["web-lint"],
+    srcs = ["ok_test.go"],
 )
 
-sh_test(
+go_test(
     name = "web_unit",
-    srcs = ["scripts/ok_test.sh"],
-    args = ["web-unit"],
+    srcs = ["ok_test.go"],
 )
 
-sh_test(
+go_test(
     name = "web_integration",
-    srcs = ["scripts/ok_test.sh"],
-    args = ["web-integration"],
+    srcs = ["ok_test.go"],
 )
 
-sh_binary(
+go_binary(
     name = "web_image",
-    srcs = ["scripts/image_runner.sh"],
-    args = ["web"],
+    embed = ["//tools/testhelpers/fakecmd:fakecmd_lib"],
 )
 
-sh_test(
+go_test(
     name = "worker_lint",
-    srcs = ["scripts/ok_test.sh"],
-    args = ["worker-lint"],
+    srcs = ["ok_test.go"],
 )
 
-sh_test(
+go_test(
     name = "worker_unit",
-    srcs = ["scripts/ok_test.sh"],
-    args = ["worker-unit"],
+    srcs = ["ok_test.go"],
 )
 
-sh_test(
+go_test(
     name = "worker_integration",
-    srcs = ["scripts/ok_test.sh"],
-    args = ["worker-integration"],
+    srcs = ["ok_test.go"],
 )
 
-sh_binary(
+go_binary(
     name = "worker_image",
-    srcs = ["scripts/image_runner.sh"],
-    args = ["worker"],
+    embed = ["//tools/testhelpers/fakecmd:fakecmd_lib"],
 )
 
 pipeline_helm_render(

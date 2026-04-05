@@ -36,6 +36,12 @@ def _normalize_label_string(value):
 def _target_labels(targets):
     return sorted([_normalize_label_string(str(target.label)) for target in targets])
 
+def _sh_quote(value):
+    return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
+def _bat_quote(value):
+    return "\"" + value.replace("\"", "\"\"") + "\""
+
 def _runfiles_path(file, is_windows):
     path = file.path
     if path.startswith("external/"):
@@ -44,32 +50,50 @@ def _runfiles_path(file, is_windows):
         runfiles_path = "_main/" + file.short_path
     return runfiles_path.replace("/", "\\") if is_windows else runfiles_path
 
+def _tool_file(dep, name):
+    files = dep[DefaultInfo].files.to_list()
+    if len(files) != 1:
+        fail("expected a single file for tool %s, got %d" % (name, len(files)))
+    return files[0]
+
 def _tool_named_file(dep, suffix, name):
-    for file in dep[DefaultInfo].files.to_list():
-        if file.path.endswith(suffix):
+    files = dep[DefaultInfo].files.to_list()
+    if len(files) == 1:
+        return files[0]
+    for file in files:
+        if file.path.endswith("/" + suffix) or file.path.endswith("\\" + suffix) or file.basename == suffix:
             return file
     fail("expected tool %s to expose %s" % (name, suffix))
 
-def _shell_wrapper(main_runfiles_path, exports):
-    lines = [
+def _runner_wrapper(helper, script, exports, is_windows):
+    args = [
+        "python-launch",
+        "--script",
+        ("${RUNFILES_DIR}/" if not is_windows else "%RUNFILES_DIR%\\") + script,
+    ]
+    for key, value in sorted(exports.items()):
+        args.extend(["--env", key + "=" + value])
+    if is_windows:
+        return "\r\n".join([
+            "@echo off",
+            "setlocal EnableExtensions EnableDelayedExpansion",
+            "if \"%RUNFILES_DIR%\"==\"\" set \"RUNFILES_DIR=%~dpn0.runfiles\\\"",
+            "if \"%BUILD_WORKSPACE_DIRECTORY%\"==\"\" (",
+            "  set \"BUILD_WORKSPACE_DIRECTORY=%CD%\"",
+            ")",
+            "\"%RUNFILES_DIR%%%s\" %s -- %%*" % (helper, " ".join([_bat_quote(arg) for arg in args])),
+            "exit /b %ERRORLEVEL%",
+        ]) + "\r\n"
+    return "\n".join([
         "#!/usr/bin/env bash",
         "set -euo pipefail",
         "launcher_dir=\"$(cd \"$(dirname \"$0\")\" && pwd)\"",
         "runfiles_dir=\"${RUNFILES_DIR:-${launcher_dir}/$(basename \"$0\").runfiles}\"",
         "export RUNFILES_DIR=\"${runfiles_dir}\"",
-    ]
-    for key, value in exports.items():
-        lines.append("export %s=%s" % (key, _json_string(value)))
-    lines.append("exec python3 \"${RUNFILES_DIR}/%s\" \"$@\"" % main_runfiles_path)
-    return "\n".join(lines) + "\n"
-
-def _unsupported_windows_wrapper(kind):
-    return "\r\n".join([
-        "@echo off",
-        "echo ERROR %s is not supported on Windows in pipeline v1 1>&2" % kind,
-        "exit /b 1",
-        "",
-    ])
+        "workspace=\"${BUILD_WORKSPACE_DIRECTORY:-$(pwd)}\"",
+        "export BUILD_WORKSPACE_DIRECTORY=\"${workspace}\"",
+        "exec %s %s -- \"$@\"" % (_sh_quote("${RUNFILES_DIR}/" + helper), " ".join([_sh_quote(arg) for arg in args])),
+    ]) + "\n"
 
 def _service_impl(ctx):
     service_name = ctx.attr.service_name if ctx.attr.service_name else ctx.label.name
@@ -154,17 +178,21 @@ def _catalog_impl(ctx):
 
 def _plan_impl(ctx):
     is_windows = ctx.target_platform_has_constraint(ctx.attr._windows_constraint[platform_common.ConstraintValueInfo])
+    helper_file = _tool_file(ctx.attr._runner, "runner")
     main_script = ctx.file._plan_main
     launcher = ctx.actions.declare_file(ctx.label.name + (".bat" if is_windows else ".sh"))
-    content = _unsupported_windows_wrapper("pipeline_plan") if is_windows else _shell_wrapper(
-        main_runfiles_path = _runfiles_path(main_script, False),
+    content = _runner_wrapper(
+        helper = _runfiles_path(helper_file, is_windows),
+        script = _runfiles_path(main_script, is_windows),
         exports = {
-            "PIPELINE_CATALOG": "${RUNFILES_DIR}/%s" % _runfiles_path(ctx.file.catalog, False),
+            "PIPELINE_CATALOG": ("${RUNFILES_DIR}/" if not is_windows else "%RUNFILES_DIR%\\") + _runfiles_path(ctx.file.catalog, is_windows),
         },
+        is_windows = is_windows,
     )
     ctx.actions.write(output = launcher, content = content, is_executable = not is_windows)
 
     runfiles_files = [
+        helper_file,
         ctx.file.catalog,
         main_script,
     ]
@@ -175,21 +203,24 @@ def _plan_impl(ctx):
 
 def _render_impl(ctx):
     is_windows = ctx.target_platform_has_constraint(ctx.attr._windows_constraint[platform_common.ConstraintValueInfo])
+    helper_file = _tool_file(ctx.attr._runner, "runner")
     main_script = ctx.file._render_main
     helm_file = _tool_named_file(ctx.attr.tool_helm, "helm.exe" if is_windows else "helm", "helm")
     launcher = ctx.actions.declare_file(ctx.label.name + (".bat" if is_windows else ".sh"))
-    content = _unsupported_windows_wrapper("pipeline_helm_render") if is_windows else _shell_wrapper(
-        main_runfiles_path = _runfiles_path(main_script, False),
+    content = _runner_wrapper(
+        helper = _runfiles_path(helper_file, is_windows),
+        script = _runfiles_path(main_script, is_windows),
         exports = {
             "PIPELINE_CHART_DIR": ctx.attr.chart_dir,
-            "PIPELINE_HELM": "${RUNFILES_DIR}/%s" % _runfiles_path(helm_file, False),
+            "PIPELINE_HELM": ("${RUNFILES_DIR}/" if not is_windows else "%RUNFILES_DIR%\\") + _runfiles_path(helm_file, is_windows),
             "PIPELINE_RELEASE_NAME": ctx.attr.release_name if ctx.attr.release_name else (ctx.attr.service_name if ctx.attr.service_name else ctx.label.name),
             "PIPELINE_SERVICE_NAME": ctx.attr.service_name if ctx.attr.service_name else ctx.label.name,
         },
+        is_windows = is_windows,
     )
     ctx.actions.write(output = launcher, content = content, is_executable = not is_windows)
 
-    runfiles_files = [main_script, helm_file]
+    runfiles_files = [helper_file, main_script, helm_file]
     runfiles_files.extend(ctx.files.chart_files)
     runfiles_files.extend(ctx.attr.tool_helm[DefaultInfo].files.to_list())
     return [DefaultInfo(
@@ -241,6 +272,7 @@ pipeline_plan = rule(
             allow_single_file = True,
             default = "//rules/pipeline/private:plan_main.py",
         ),
+        "_runner": attr.label(cfg = "exec", default = "//tools/source_runner:runner"),
         "_windows_constraint": attr.label(default = "@platforms//os:windows"),
     },
 )
@@ -258,6 +290,7 @@ pipeline_helm_render = rule(
             allow_single_file = True,
             default = "//rules/pipeline/private:render_main.py",
         ),
+        "_runner": attr.label(cfg = "exec", default = "//tools/source_runner:runner"),
         "_windows_constraint": attr.label(default = "@platforms//os:windows"),
     },
 )

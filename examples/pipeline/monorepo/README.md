@@ -17,14 +17,14 @@ Useful commands:
 bazel run //examples/pipeline/monorepo:plan -- \
   --changed-files examples/pipeline/monorepo/shared/contracts/api.schema.json
 
-python3 scripts/pipeline/invoke_image_target.py \
+python scripts/pipeline/invoke_image_target.py \
   --config examples/pipeline/monorepo/pipeline.json \
   --service api \
   --target //examples/pipeline/monorepo:api_image \
   --tag dev-local \
   --metadata-file /tmp/api-image.json
 
-python3 scripts/pipeline/render_to_gitops.py \
+python scripts/pipeline/render_to_gitops.py \
   --config examples/pipeline/monorepo/pipeline.json \
   --service api \
   --render-target //examples/pipeline/monorepo:api_render \

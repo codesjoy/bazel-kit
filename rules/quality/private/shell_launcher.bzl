@@ -1,9 +1,6 @@
 def _short_paths(files):
     return sorted([f.short_path for f in files])
 
-def _windows_paths(paths):
-    return [path.replace("/", "\\") for path in paths]
-
 def _sh_quote(value):
     return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
@@ -16,11 +13,7 @@ def _tool_file(dep, name):
         fail("expected a single file for tool %s, got %d" % (name, len(files)))
     return files[0]
 
-def _tool_path(file, is_windows):
-    path = file.path
-    return path.replace("/", "\\") if is_windows else path
-
-def _tool_runfiles_path(file, is_windows):
+def _runfiles_path(file, is_windows):
     path = file.path
     if path.startswith("external/"):
         runfiles_path = path[len("external/"):]
@@ -28,98 +21,70 @@ def _tool_runfiles_path(file, is_windows):
         runfiles_path = "_main/" + file.short_path
     return runfiles_path.replace("/", "\\") if is_windows else runfiles_path
 
-def _render_shell(scripts, tools):
-    lines = [
+def _render_shell(helper, args):
+    return "\n".join([
         "#!/usr/bin/env bash",
         "set -euo pipefail",
         "launcher_dir=\"$(cd \"$(dirname \"$0\")\" && pwd)\"",
         "runfiles_dir=\"${RUNFILES_DIR:-${launcher_dir}/$(basename \"$0\").runfiles}\"",
-        "RUNFILES_DIR=\"${runfiles_dir}\"",
+        "export RUNFILES_DIR=\"${runfiles_dir}\"",
         "workspace=\"${BUILD_WORKSPACE_DIRECTORY:-$(pwd)}\"",
-        "cd \"${workspace}\"",
-        "info() { printf 'INFO  %s\\n' \"$*\" >&2; }",
-        "warn() { printf 'WARN  %s\\n' \"$*\" >&2; }",
-        "success() { printf 'SUCCESS %s\\n' \"$*\" >&2; }",
-        "SHFMT=%s" % _sh_quote("${RUNFILES_DIR}/" + tools["shfmt"]),
-        "SHELLCHECK=%s" % _sh_quote("${RUNFILES_DIR}/" + tools["shellcheck"]),
-    ]
-    if not scripts:
-        lines.extend([
-            "warn \"No shell scripts found to lint\"",
-            "exit 0",
-        ])
-    else:
-        args = " ".join([_sh_quote(path) for path in scripts])
-        lines.extend([
-            "info \"Linting shell scripts\"",
-            "\"${SHFMT}\" -d %s" % args,
-            "\"${SHELLCHECK}\" -x %s" % args,
-            "success \"Shell scripts linted successfully\"",
-        ])
-    return "\n".join(lines) + "\n"
+        "export BUILD_WORKSPACE_DIRECTORY=\"${workspace}\"",
+        "exec %s %s \"$@\"" % (_sh_quote("${RUNFILES_DIR}/" + helper), " ".join([_sh_quote(arg) for arg in args])),
+    ]) + "\n"
 
-def _render_batch(scripts, tools):
-    lines = [
+def _render_batch(helper, args):
+    return "\r\n".join([
         "@echo off",
         "setlocal EnableExtensions EnableDelayedExpansion",
         "if \"%RUNFILES_DIR%\"==\"\" set \"RUNFILES_DIR=%~dpn0.runfiles\\\"",
         "if \"%BUILD_WORKSPACE_DIRECTORY%\"==\"\" (",
-        "  set \"WORKSPACE=%CD%\"",
-        ") else (",
-        "  set \"WORKSPACE=%BUILD_WORKSPACE_DIRECTORY%\"",
+        "  set \"BUILD_WORKSPACE_DIRECTORY=%CD%\"",
         ")",
-        "cd /d \"%WORKSPACE%\"",
-        "set \"SHFMT=%RUNFILES_DIR%%%s\"" % tools["shfmt"],
-        "set \"SHELLCHECK=%RUNFILES_DIR%%%s\"" % tools["shellcheck"],
-    ]
-    if not scripts:
-        lines.extend([
-            "echo WARN  No shell scripts found to lint 1>&2",
-            "exit /b 0",
-        ])
-    else:
-        args = " ".join([_bat_quote("%WORKSPACE%\\" + path) for path in _windows_paths(scripts)])
-        lines.extend([
-            "echo INFO  Linting shell scripts 1>&2",
-            "\"!SHFMT!\" -d %s" % args,
-            "if errorlevel 1 exit /b 1",
-            "call \"!SHELLCHECK!\" -x %s" % args,
-            "if errorlevel 1 exit /b 1",
-            "echo SUCCESS Shell scripts linted successfully 1>&2",
-            "exit /b 0",
-        ])
-    return "\r\n".join(lines) + "\r\n"
+        "\"%RUNFILES_DIR%%%s\" %s %%*" % (helper, " ".join([_bat_quote(arg) for arg in args])),
+        "exit /b %ERRORLEVEL%",
+    ]) + "\r\n"
 
 def _impl(ctx):
     is_windows = ctx.target_platform_has_constraint(ctx.attr._windows_constraint[platform_common.ConstraintValueInfo])
-    scripts = _short_paths(ctx.files.scripts)
-    tool_files = [
-        _tool_file(ctx.attr.tool_shfmt, "shfmt"),
-        _tool_file(ctx.attr.tool_shellcheck, "shellcheck"),
+    helper_file = _tool_file(ctx.attr._runner, "runner")
+    shfmt_file = _tool_file(ctx.attr.tool_shfmt, "shfmt")
+    shellcheck_file = _tool_file(ctx.attr.tool_shellcheck, "shellcheck")
+    args = [
+        "shell",
+        "--kind",
+        ctx.attr.kind,
+        "--tool-shfmt",
+        "${RUNFILES_DIR}/" + _runfiles_path(shfmt_file, is_windows),
+        "--tool-shellcheck",
+        "${RUNFILES_DIR}/" + _runfiles_path(shellcheck_file, is_windows),
     ]
-    tools = {
-        "shfmt": _tool_runfiles_path(tool_files[0], is_windows),
-        "shellcheck": _tool_runfiles_path(tool_files[1], is_windows),
-    }
+    for script in _short_paths(ctx.files.scripts):
+        args.extend(["--script", script])
+    for root in ctx.attr.roots:
+        args.extend(["--root", root])
+    if ctx.attr.shellcheck_required:
+        args.extend(["--shellcheck-required", "true"])
+
     launcher = ctx.actions.declare_file(ctx.label.name + (".bat" if is_windows else ".sh"))
-    content = _render_batch(scripts, tools) if is_windows else _render_shell(scripts, tools)
-    ctx.actions.write(
-        output = launcher,
-        content = content,
-        is_executable = not is_windows,
-    )
+    content = _render_batch(_runfiles_path(helper_file, is_windows), args) if is_windows else _render_shell(_runfiles_path(helper_file, is_windows), args)
+    ctx.actions.write(output = launcher, content = content, is_executable = not is_windows)
     return [DefaultInfo(
         executable = launcher,
-        runfiles = ctx.runfiles(files = ctx.files.scripts + tool_files),
+        runfiles = ctx.runfiles(files = [helper_file, shfmt_file, shellcheck_file]),
     )]
 
 quality_shell_runner = rule(
     implementation = _impl,
     executable = True,
     attrs = {
-        "scripts": attr.label_list(allow_files = True, mandatory = True),
+        "kind": attr.string(mandatory = True, values = ["lint", "scripts_lint"]),
+        "scripts": attr.label_list(allow_files = True),
+        "roots": attr.string_list(),
+        "shellcheck_required": attr.bool(default = False),
         "tool_shfmt": attr.label(cfg = "exec", default = "@quality_tool_shfmt//:tool"),
         "tool_shellcheck": attr.label(cfg = "exec", default = "@quality_tool_shellcheck//:tool"),
+        "_runner": attr.label(cfg = "exec", default = "//tools/source_runner:runner"),
         "_windows_constraint": attr.label(default = "@platforms//os:windows"),
     },
 )

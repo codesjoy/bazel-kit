@@ -1,0 +1,25 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_library")
+
+package(default_visibility = ["//visibility:public"])
+
+go_library(
+    name = "runner_lib",
+    srcs = [
+        "changelog.go",
+        "common.go",
+        "copyright.go",
+        "devx.go",
+        "main.go",
+        "migrate.go",
+        "python_launch.go",
+        "shell.go",
+        "workspace.go",
+        "wire.go",
+    ],
+    importpath = "github.com/codesjoy/bazel-kit/tools/source_runner",
+)
+
+go_binary(
+    name = "runner",
+    embed = [":runner_lib"],
+)

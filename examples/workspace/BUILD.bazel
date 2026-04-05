@@ -1,13 +1,13 @@
-load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+load("@rules_go//go:def.bzl", "go_binary")
 load("//rules/workspace:defs.bzl", "workspace_sync")
 
 package(default_visibility = ["//visibility:public"])
 
 exports_files(["go.work"])
 
-sh_binary(
+go_binary(
     name = "noop_gazelle",
-    srcs = ["noop_gazelle.sh"],
+    embed = ["//tools/testhelpers/fakecmd:fakecmd_lib"],
 )
 
 workspace_sync(

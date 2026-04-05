@@ -1,4 +1,6 @@
 package(default_visibility = ["//visibility:public"])
 
-exports_files(["helpers.bzl"])
-
+exports_files([
+    "go_source_tool_repository.bzl",
+    "helpers.bzl",
+])

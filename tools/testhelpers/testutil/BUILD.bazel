@@ -1,0 +1,9 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+package(default_visibility = ["//visibility:public"])
+
+go_library(
+    name = "testutil",
+    srcs = ["testutil.go"],
+    importpath = "github.com/codesjoy/bazel-kit/tools/testhelpers/testutil",
+)

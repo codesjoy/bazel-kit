@@ -18,7 +18,7 @@ def _tool_runfiles_path(file, is_windows):
         runfiles_path = "_main/" + file.short_path
     return runfiles_path.replace("/", "\\") if is_windows else runfiles_path
 
-def _render_shell(dsn, out_dir, schema, tables, override, gen_aipsql, timestamp_mode, dry_run, force, package_name, tools):
+def _render_shell(dsn, dsn_env, out_dir, schema, tables, override, gen_aipsql, timestamp_mode, dry_run, force, package_name, tools):
     lines = [
         "#!/usr/bin/env bash",
         "set -euo pipefail",
@@ -28,14 +28,22 @@ def _render_shell(dsn, out_dir, schema, tables, override, gen_aipsql, timestamp_
         "workspace=\"${BUILD_WORKSPACE_DIRECTORY:-$(pwd)}\"",
         "cd \"${workspace}\"",
         "info() { printf 'INFO  %s\\n' \"$*\" >&2; }",
+        "error() { printf 'ERROR %s\\n' \"$*\" >&2; }",
         "success() { printf 'SUCCESS %s\\n' \"$*\" >&2; }",
         "MODELGEN=%s" % _sh_quote("${RUNFILES_DIR}/" + tools["modelgen"]),
         "args=()",
-        "args+=(--dsn %s)" % _sh_quote(dsn),
+        "dsn_value=%s" % _sh_quote(dsn),
+        "if [[ -z \"${dsn_value}\" ]]; then",
+        "  error \"Modelgen DSN is not set\"",
+        "  exit 1",
+        "fi",
+        "args+=(--dsn \"${dsn_value}\")",
         "args+=(--out-dir %s)" % _sh_quote(out_dir),
         "args+=(--gen-aipsql %s)" % _sh_quote("true" if gen_aipsql else "false"),
         "args+=(--timestamp-mode %s)" % _sh_quote(timestamp_mode),
     ]
+    if dsn_env:
+        lines.insert(14, "if [[ -z \"${dsn_value}\" ]]; then dsn_value=\"${%s:-}\"; fi" % dsn_env)
     if schema:
         lines.append("args+=(--schema %s)" % _sh_quote(schema))
     if tables:
@@ -55,7 +63,7 @@ def _render_shell(dsn, out_dir, schema, tables, override, gen_aipsql, timestamp_
     ])
     return "\n".join(lines) + "\n"
 
-def _render_batch(dsn, out_dir, schema, tables, override, gen_aipsql, timestamp_mode, dry_run, force, package_name, tools):
+def _render_batch(dsn, dsn_env, out_dir, schema, tables, override, gen_aipsql, timestamp_mode, dry_run, force, package_name, tools):
     lines = [
         "@echo off",
         "setlocal EnableExtensions EnableDelayedExpansion",
@@ -67,14 +75,24 @@ def _render_batch(dsn, out_dir, schema, tables, override, gen_aipsql, timestamp_
         ")",
         "cd /d \"%WORKSPACE%\"",
         "set \"MODELGEN=%RUNFILES_DIR%%%s\"" % tools["modelgen"],
+        "set \"DSN=%s\"" % dsn.replace("\"", "\"\""),
+    ]
+    if dsn_env:
+        lines.extend([
+            "if \"%DSN%\"==\"\" set \"DSN=%%%s%%\"" % dsn_env,
+        ])
+    lines.extend([
+        "if \"%DSN%\"==\"\" (",
+        "  echo ERROR Modelgen DSN is not set 1>&2",
+        "  exit /b 1",
+        ")",
         "echo INFO  Running codesjoy-modelgen 1>&2",
-        "\"!MODELGEN!\" --dsn %s --out-dir %s --gen-aipsql %s --timestamp-mode %s" % (
-            _bat_quote(dsn),
+        "\"!MODELGEN!\" --dsn \"%DSN%\" --out-dir %s --gen-aipsql %s --timestamp-mode %s" % (
             _bat_quote(out_dir),
             _bat_quote("true" if gen_aipsql else "false"),
             _bat_quote(timestamp_mode),
         ),
-    ]
+    ])
     if schema:
         lines[-1] += " --schema %s" % _bat_quote(schema)
     if tables:
@@ -104,6 +122,7 @@ def _impl(ctx):
     launcher = ctx.actions.declare_file(ctx.label.name + (".bat" if is_windows else ".sh"))
     content = _render_batch(
         ctx.attr.dsn,
+        ctx.attr.dsn_env,
         ctx.attr.out_dir,
         ctx.attr.schema,
         ctx.attr.tables,
@@ -116,6 +135,7 @@ def _impl(ctx):
         tools,
     ) if is_windows else _render_shell(
         ctx.attr.dsn,
+        ctx.attr.dsn_env,
         ctx.attr.out_dir,
         ctx.attr.schema,
         ctx.attr.tables,
@@ -142,7 +162,8 @@ codesjoy_modelgen_runner = rule(
     implementation = _impl,
     executable = True,
     attrs = {
-        "dsn": attr.string(mandatory = True),
+        "dsn": attr.string(),
+        "dsn_env": attr.string(),
         "out_dir": attr.string(mandatory = True),
         "schema": attr.string(),
         "tables": attr.string_list(),

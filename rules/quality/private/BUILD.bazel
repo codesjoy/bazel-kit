@@ -1,54 +1,68 @@
-load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("@rules_go//go:def.bzl", "go_binary", "go_test")
+load("//rules/quality:shell.bzl", "shell_lint", "shell_scripts_lint")
 
 package(default_visibility = ["//visibility:public"])
 
-sh_test(
-    name = "go_runner_text_test",
-    srcs = ["go_runner_text_test.sh"],
+go_binary(
+    name = "fake_shfmt",
+    embed = ["//tools/testhelpers/fakecmd:fakecmd_lib"],
+)
+
+go_binary(
+    name = "fake_shellcheck_enabled",
+    embed = ["//tools/testhelpers/fakecmd:fakecmd_lib"],
+)
+
+go_binary(
+    name = "fake_shellcheck_disabled",
+    embed = ["//tools/testhelpers/fakecmd:fakecmd_lib"],
+)
+
+shell_scripts_lint(
+    name = "scripts_smoke_launcher",
+    roots = ["scripts"],
+    tool_shfmt = ":fake_shfmt",
+    tool_shellcheck = ":fake_shellcheck_enabled",
+)
+
+shell_scripts_lint(
+    name = "scripts_required_fail_launcher",
+    roots = ["scripts"],
+    shellcheck_required = True,
+    tool_shfmt = ":fake_shfmt",
+    tool_shellcheck = ":fake_shellcheck_disabled",
+)
+
+go_test(
+    name = "launcher_test",
+    srcs = ["launcher_test.go"],
     data = [
         "//rules/quality:go.bzl",
+        "//rules/quality:shell.bzl",
+        "//rules/quality:web.bzl",
         "//rules/quality:extensions.bzl",
         ":go_launcher.bzl",
+        ":shell_launcher.bzl",
+        ":web_launcher.bzl",
         "//tools/quality/go:versions.bzl",
+        "//tools/quality/shell:versions.bzl",
+        "//tools/quality/web:versions.bzl",
+        ":scripts_smoke_launcher",
+        ":scripts_required_fail_launcher",
     ],
     args = [
         "$(location //rules/quality:go.bzl)",
-        "$(location //rules/quality:extensions.bzl)",
-        "$(location :go_launcher.bzl)",
-        "$(location //tools/quality/go:versions.bzl)",
-    ],
-)
-
-sh_test(
-    name = "shell_runner_text_test",
-    srcs = ["shell_runner_text_test.sh"],
-    data = [
-        "//rules/quality:shell.bzl",
-        "//rules/quality:extensions.bzl",
-        ":shell_launcher.bzl",
-        "//tools/quality/shell:versions.bzl",
-    ],
-    args = [
         "$(location //rules/quality:shell.bzl)",
-        "$(location //rules/quality:extensions.bzl)",
-        "$(location :shell_launcher.bzl)",
-        "$(location //tools/quality/shell:versions.bzl)",
-    ],
-)
-
-sh_test(
-    name = "web_runner_text_test",
-    srcs = ["web_runner_text_test.sh"],
-    data = [
-        "//rules/quality:web.bzl",
-        "//rules/quality:extensions.bzl",
-        ":web_launcher.bzl",
-        "//tools/quality/web:versions.bzl",
-    ],
-    args = [
         "$(location //rules/quality:web.bzl)",
         "$(location //rules/quality:extensions.bzl)",
+        "$(location :go_launcher.bzl)",
+        "$(location :shell_launcher.bzl)",
         "$(location :web_launcher.bzl)",
+        "$(location //tools/quality/go:versions.bzl)",
+        "$(location //tools/quality/shell:versions.bzl)",
         "$(location //tools/quality/web:versions.bzl)",
+        "$(location :scripts_smoke_launcher)",
+        "$(location :scripts_required_fail_launcher)",
     ],
+    deps = ["//tools/testhelpers/testutil"],
 )

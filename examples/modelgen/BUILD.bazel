@@ -7,7 +7,7 @@ exports_files(["override.yaml"])
 
 codesjoy_modelgen(
     name = "generate_models",
-    dsn = "postgres://modelgen:modelgen@127.0.0.1:5432/modelgen_it?sslmode=disable",
+    dsn_env = "DATABASE_DSN",
     schema = "public",
     tables = ["users"],
     out_dir = "examples/modelgen/output",

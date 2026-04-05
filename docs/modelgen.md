@@ -74,7 +74,7 @@ load("@codesjoy_bazel_kit//rules/modelgen:defs.bzl", "codesjoy_modelgen")
 ```starlark
 codesjoy_modelgen(
     name = "generate_models",
-    dsn = "...",
+    dsn_env = "DATABASE_DSN",
     out_dir = "internal/model",
     schema = "public",
     tables = ["users"],
@@ -89,7 +89,8 @@ codesjoy_modelgen(
 
 | Attr | Required | Meaning |
 | --- | --- | --- |
-| `dsn` | yes | Database connection string |
+| `dsn` | exactly one of `dsn` or `dsn_env` | Inline database connection string |
+| `dsn_env` | exactly one of `dsn` or `dsn_env` | Environment variable name that provides the DSN at runtime |
 | `out_dir` | yes | Output directory written relative to `BUILD_WORKSPACE_DIRECTORY` |
 | `schema` | no | Database schema name |
 | `tables` | no | Table allow-list; passed as a comma-separated flag |
@@ -109,7 +110,7 @@ load("@codesjoy_bazel_kit//rules/modelgen:defs.bzl", "codesjoy_modelgen")
 
 codesjoy_modelgen(
     name = "generate_models",
-    dsn = "postgres://user:pass@127.0.0.1:5432/demo?sslmode=disable",
+    dsn_env = "DATABASE_DSN",
     schema = "public",
     tables = ["users"],
     out_dir = "internal/model",
@@ -121,7 +122,7 @@ codesjoy_modelgen(
 ```starlark
 codesjoy_modelgen(
     name = "generate_models",
-    dsn = "postgres://modelgen:modelgen@127.0.0.1:5432/modelgen_it?sslmode=disable",
+    dsn_env = "DATABASE_DSN",
     schema = "public",
     tables = ["users"],
     out_dir = "examples/modelgen/output",
@@ -150,5 +151,6 @@ The example is intentionally not executed in CI because it requires a live datab
 
 - This capability does not provision a database.
 - CI only validates the launcher shape, not a real generation run.
+- Prefer `dsn_env` for real repositories so database credentials do not live in BUILD files.
 - DSN correctness, network reachability, schema existence, and credential validity remain caller-owned.
 - The pinned `codesjoy/pkg` commit is intentionally strict; unknown commits are rejected by the extension.

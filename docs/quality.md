@@ -34,7 +34,7 @@ That is why the public API is intentionally small and capability-centered.
 - Managed tools are installed through `quality_tools`.
 - Launchers execute from the source workspace, not from runfiles.
 - `go_fmt` is source-tree-writing by design.
-- `go_fmt_check`, `go_lint`, and `shell_lint` validate the current workspace state without rewriting files.
+- `go_fmt_check`, `go_lint`, `shell_lint`, and `shell_scripts_lint` validate the current workspace state without rewriting files.
 - Go file and module discovery is implemented in the launcher and excludes common generated and transient directories.
 
 ## Managed Tools And Prerequisites
@@ -152,21 +152,28 @@ The rule fails if any tool reports drift.
   - temporary Go build cache
   - temporary golangci-lint cache
 
-### Shell Rule
+### Shell Rules
 
 Load from:
 
 ```starlark
-load("@codesjoy_bazel_kit//rules/quality:shell.bzl", "shell_lint")
+load("@codesjoy_bazel_kit//rules/quality:shell.bzl", "shell_lint", "shell_scripts_lint")
 ```
 
 | Rule | Required attrs | Optional attrs | Writes source tree? | Behavior |
 | --- | --- | --- | --- | --- |
-| `shell_lint` | `scripts` | none | no | Runs `shfmt -d` followed by `shellcheck -x` |
+| `shell_lint` | `scripts` | none | no | Runs `shfmt -d` followed by `shellcheck -x` on explicitly listed files |
+| `shell_scripts_lint` | none | `roots`, `scripts`, `shellcheck_required` | no | Runs `shfmt -d` and `shellcheck -x` across discovered or explicitly listed repo scripts |
 
 `shell_lint` does not auto-discover files. Callers pass the scripts explicitly.
 
-When `shellcheck` is not enabled in `quality_tools.install(shellcheck = True)`, the managed `shellcheck` repo becomes a warning wrapper that exits successfully with a message. This keeps `shfmt` active by default without forcing every workspace to adopt shellcheck immediately.
+`shell_scripts_lint` is the repo-level shell quality helper that mirrors the old `scripts.lint` behavior:
+
+- if `scripts` is provided, only those files are checked
+- otherwise it discovers `*.sh` files plus `bin/*` entries under the requested `roots`
+- discovery excludes `vendor/`, `_output/`, `.tmp/`, `.git/`, and `bazel-*`
+
+When `shellcheck` is not enabled in `quality_tools.install(shellcheck = True)`, the managed `shellcheck` repo becomes a warning wrapper that exits successfully with a message. `shell_scripts_lint(shellcheck_required = True)` upgrades that warning path into a hard failure.
 
 ## Common Workflows
 
@@ -197,11 +204,17 @@ go_lint(
 ### Minimal Shell Setup
 
 ```starlark
-load("@codesjoy_bazel_kit//rules/quality:shell.bzl", "shell_lint")
+load("@codesjoy_bazel_kit//rules/quality:shell.bzl", "shell_lint", "shell_scripts_lint")
 
 shell_lint(
     name = "lint",
     scripts = ["demo.sh"],
+)
+
+shell_scripts_lint(
+    name = "scripts_lint",
+    roots = ["scripts"],
+    shellcheck_required = True,
 )
 ```
 
@@ -225,12 +238,13 @@ Example targets:
 - `go_fmt` mutates files in place; check and lint rules do not.
 - `go_lint` is module-scoped, not package-scoped.
 - `shell_lint` is intentionally explicit about which scripts it receives.
+- `shell_scripts_lint` is the discovery-based repo shell workflow.
 - The capability does not attempt to manage generated-file ownership beyond excluding common generated Go file patterns from automatic discovery.
 
 ## Limits And Non-Goals
 
 - `quality` is not a build/test abstraction. It only covers formatting and linting workflows.
-- It does not auto-discover shell scripts.
+- `shell_lint` does not auto-discover shell scripts; use `shell_scripts_lint` for that workflow.
 - It does not infer `local_prefix` or lint config paths.
 - It does not attempt to wrap every upstream tool flag.
 - `shellcheck` is intentionally opt-in by default.
@@ -258,6 +272,10 @@ quality_tools.install(domains = ["shell"], shellcheck = True)
 ```
 
 or include `shell` alongside any other enabled domains.
+
+### `shell_scripts_lint(shellcheck_required = True)` fails immediately
+
+That means the repo is still using the disabled shellcheck wrapper. Enable `shellcheck` in `quality_tools.install(...)` or relax `shellcheck_required`.
 
 ### Web Rules
 

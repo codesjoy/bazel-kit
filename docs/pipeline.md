@@ -182,8 +182,8 @@ Those workflows pair with:
 
 - [`scripts/pipeline/invoke_image_target.py`](../scripts/pipeline/invoke_image_target.py)
 - [`scripts/pipeline/render_to_gitops.py`](../scripts/pipeline/render_to_gitops.py)
-- [`scripts/pipeline/gitops_commit.sh`](../scripts/pipeline/gitops_commit.sh)
-- [`scripts/pipeline/cleanup_gitops.sh`](../scripts/pipeline/cleanup_gitops.sh)
+- [`scripts/pipeline/gitops_commit.py`](../scripts/pipeline/gitops_commit.py)
+- [`scripts/pipeline/cleanup_gitops.py`](../scripts/pipeline/cleanup_gitops.py)
 
 The intended model is:
 
@@ -196,9 +196,9 @@ The intended model is:
 
 ## Operational Notes
 
-- `pipeline_plan` currently requires `python3`, `bazel`, and optionally `git` when using `--base/--head`.
-- `pipeline_helm_render` currently requires `python3`.
-- The v1 launchers are Linux and macOS focused; Windows execution currently returns an explicit unsupported error.
+- `pipeline_plan` requires Python 3, `bazel`, and optionally `git` when using `--base/--head`.
+- `pipeline_helm_render` requires Python 3.
+- The launchers resolve a Python 3 interpreter on Windows, macOS, and Linux before dispatching to the repo-owned Python entrypoints.
 - `shared_baseline` preview mode routes declared `runtime_deps` to the configured baseline environment.
 - `full_isolated` preview mode is intended for independently deployable apps or workers that do not need shared baseline routing.
 

@@ -1,110 +1,29 @@
-load("@rules_shell//shell:sh_test.bzl", "sh_test")
-load("//rules/protobuf:buf.bzl", "buf_breaking", "buf_dep_update", "buf_format", "buf_format_check", "buf_generate", "buf_lint")
+load("@bazel_gazelle//:def.bzl", "gazelle", "gazelle_binary")
+load("@rules_buf//buf:defs.bzl", "buf_format")
 
 package(default_visibility = ["//visibility:public"])
 
 exports_files([
-    "buf.gen.codesjoy_event.yaml",
-    "buf.gen.codesjoy_reason.yaml",
-    "buf.gen.google_aip.yaml",
-    "buf.gen.yaml",
+    "against.binpb",
     "buf.yaml",
 ])
 
-filegroup(
-    name = "example_files",
-    srcs = glob(
-        ["**"],
-        exclude = ["gen/**"],
-    ),
+# gazelle:buf_breaking_against //examples/protobuf:against.binpb
+
+gazelle_binary(
+    name = "gazelle_buf",
+    languages = [
+        "@bazel_gazelle//language/proto:go_default_library",
+        "@rules_buf//gazelle/buf:buf",
+    ],
+)
+
+gazelle(
+    name = "gazelle",
+    args = ["examples/protobuf"],
+    gazelle = ":gazelle_buf",
 )
 
 buf_format(
-    name = "format",
-    config = ":buf.yaml",
-    files = ["proto/acme/weather/v1/weather.proto"],
-)
-
-buf_format_check(
-    name = "format_check",
-    config = ":buf.yaml",
-    files = ["proto/acme/weather/v1/weather.proto"],
-)
-
-buf_lint(
-    name = "lint",
-    config = ":buf.yaml",
-)
-
-buf_breaking(
-    name = "breaking",
-    config = ":buf.yaml",
-)
-
-buf_breaking(
-    name = "breaking_explicit",
-    config = ":buf.yaml",
-    against = ".git#branch=main,subdir=examples/protobuf",
-)
-
-buf_generate(
-    name = "generate",
-    config = ":buf.yaml",
-    template = ":buf.gen.yaml",
-)
-
-buf_generate(
-    name = "generate_codesjoy_event",
-    config = ":buf.yaml",
-    template = ":buf.gen.codesjoy_event.yaml",
-    local_plugins = ["@protobuf_tool_protoc_gen_codesjoy_event//:tool"],
-)
-
-buf_generate(
-    name = "generate_codesjoy_reason",
-    config = ":buf.yaml",
-    template = ":buf.gen.codesjoy_reason.yaml",
-    local_plugins = ["@protobuf_tool_protoc_gen_codesjoy_reason//:tool"],
-)
-
-buf_generate(
-    name = "generate_google_aip",
-    config = ":buf.yaml",
-    template = ":buf.gen.google_aip.yaml",
-    local_plugins = ["@protobuf_tool_protoc_gen_google_aip//:tool"],
-)
-
-buf_dep_update(
-    name = "dep_update",
-    config = ":buf.yaml",
-)
-
-sh_test(
-    name = "runtime_integration_test",
-    srcs = ["runtime_integration_test.sh"],
-    data = [
-        ":breaking",
-        ":breaking_explicit",
-        ":dep_update",
-        ":example_files",
-        ":format",
-        ":format_check",
-        ":generate",
-        ":generate_codesjoy_event",
-        ":generate_codesjoy_reason",
-        ":generate_google_aip",
-        ":lint",
-    ],
-    args = [
-        "$(rootpath :format)",
-        "$(rootpath :format_check)",
-        "$(rootpath :lint)",
-        "$(rootpath :breaking)",
-        "$(rootpath :breaking_explicit)",
-        "$(rootpath :generate)",
-        "$(rootpath :generate_codesjoy_event)",
-        "$(rootpath :generate_codesjoy_reason)",
-        "$(rootpath :generate_google_aip)",
-        "$(rootpath :dep_update)",
-    ],
+    name = "buf_format",
 )

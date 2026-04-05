@@ -1,4 +1,0 @@
-version: v2
-plugins:
-  - local: examples/protobuf/plugins/protoc-gen-example
-    out: examples/protobuf/gen/example

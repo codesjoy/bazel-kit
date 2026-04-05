@@ -1,0 +1,9 @@
+load("@rules_buf//buf:defs.bzl", "buf_breaking_test")
+
+buf_breaking_test(
+    name = "buf_breaking",
+    against = "//examples/protobuf:against.binpb",
+    config = "//examples/protobuf:buf.yaml",
+    module = "proto",
+    targets = ["//examples/protobuf/proto/acme/weather/v1:acme_weather_v1_proto"],
+)

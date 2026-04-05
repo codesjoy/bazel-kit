@@ -16,7 +16,7 @@ The repository is organized around capability-focused, runnable workflows rather
 
 ### `protobuf`
 
-`protobuf` manages protobuf workflows with Buf as the control plane. It is intentionally workflow-oriented: formatting, linting, breaking checks, code generation, dependency lock updates, and Bazel-managed codesjoy protoc plugins. It does not try to wrap Bazel's `proto_library` graph in v1. Read [docs/protobuf.md](docs/protobuf.md) and inspect [examples/protobuf](examples/protobuf).
+`protobuf` is documented here as an official `rules_buf` integration path, not a repo-owned rule surface. This repo now points consumers at upstream `rules_buf` + Gazelle for `proto_library`-based linting and breaking checks, and keeps only a copyable example plus migration guidance. Read [docs/protobuf.md](docs/protobuf.md) and inspect [examples/protobuf](examples/protobuf).
 
 ### `modelgen`
 
@@ -36,15 +36,6 @@ quality_tools.install(domains = ["go", "shell", "web"])
 
 web_tools = use_extension("@codesjoy_bazel_kit//rules/web:extensions.bzl", "web_tools")
 web_tools.install()
-
-protobuf_tools = use_extension("@codesjoy_bazel_kit//rules/protobuf:extensions.bzl", "protobuf_tools")
-protobuf_tools.install(
-    plugins = [
-        "codesjoy_event",
-        "codesjoy_reason",
-        "google_aip",
-    ],
-)
 
 modelgen_tools = use_extension("@codesjoy_bazel_kit//rules/modelgen:extensions.bzl", "modelgen_tools")
 modelgen_tools.install()
@@ -67,18 +58,12 @@ use_repo(
 )
 
 use_repo(
-    protobuf_tools,
-    "protobuf_tool_buf",
-    "protobuf_tool_protoc_gen_codesjoy_event",
-    "protobuf_tool_protoc_gen_codesjoy_reason",
-    "protobuf_tool_protoc_gen_google_aip",
-)
-
-use_repo(
     modelgen_tools,
     "modelgen_tool_codesjoy_modelgen",
 )
 ```
+
+For protobuf, use upstream `rules_buf` directly instead of a `bazel-kit` wrapper. The repository’s official setup example and migration notes live in [docs/protobuf.md](docs/protobuf.md).
 
 From there, load the rule entrypoints you need:
 
@@ -86,7 +71,6 @@ From there, load the rule entrypoints you need:
 - `@codesjoy_bazel_kit//rules/quality:shell.bzl`
 - `@codesjoy_bazel_kit//rules/quality:web.bzl`
 - `@codesjoy_bazel_kit//rules/web:defs.bzl`
-- `@codesjoy_bazel_kit//rules/protobuf:buf.bzl`
 - `@codesjoy_bazel_kit//rules/modelgen:defs.bzl`
 - `@codesjoy_bazel_kit//rules/workspace:defs.bzl`
 
@@ -96,7 +80,7 @@ From there, load the rule entrypoints you need:
 | --- | --- | --- | --- | --- | --- |
 | `quality` | `go_fmt`, `go_fmt_check`, `go_lint`, `shell_lint`, `web_fmt`, `web_fmt_check`, `web_lint` | `gofumpt`, `goimports`, `golines`, `golangci-lint`, `shfmt`, optional `shellcheck`, `biome` | `go_fmt` and `web_fmt` write source files; the check and lint rules do not | No separate formatter/linter install is required | `//examples/quality/go:fmt`, `//examples/quality/go:fmt_check`, `//examples/quality/go:lint`, `//examples/quality/shell:lint`, `//examples/quality/web:lint` |
 | `web` | `web_init`, `web_install`, `web_dev`, `web_build`, `web_preview`, `web_typecheck`, `web_test`, `web_browser_install`, `web_e2e` | `node`, `pnpm` | `web_init`, `web_install`, `web_build`, and `web_browser_install` write the source workspace or local tool cache directories | No separate Node or pnpm install is required | `//examples/web/vite:install`, `//examples/web/vite:build`, `//examples/web/vite:typecheck`, `//examples/web/vite:test`, `//examples/web/vite:e2e` |
-| `protobuf` | `buf_format`, `buf_format_check`, `buf_lint`, `buf_breaking`, `buf_generate`, `buf_dep_update` | `buf`, `protoc-gen-codesjoy-event`, `protoc-gen-codesjoy-reason`, `protoc-gen-google-aip` | `buf_format`, `buf_generate`, and `buf_dep_update` write the source workspace | `git` is required only for the default `buf_breaking` mode; plugin inputs and plugin-selected templates remain the caller's responsibility | `//examples/protobuf:generate_codesjoy_event`, `//examples/protobuf:generate_codesjoy_reason`, `//examples/protobuf:generate_google_aip` |
+| `protobuf` | none in this repo; use upstream `@rules_buf//buf:defs.bzl` and `@rules_buf//gazelle/buf:buf` | upstream `rules_buf` toolchains | upstream `buf_format` writes source files; generated lint/breaking tests do not | image maintenance for breaking checks remains caller-owned | `//examples/protobuf:gazelle`, `//examples/protobuf:buf_format` |
 | `modelgen` | `codesjoy_modelgen` | `codesjoy-modelgen` | yes | a reachable database is required when the target is actually run | `//examples/modelgen:generate_models` |
 | `workspace` | `workspace_sync` | none | yes; it rewrites `go.work` and may trigger follow-up commands that write files | `go`, `bazel`, and whatever the optional follow-up target requires | `//examples/workspace:sync` |
 
@@ -104,7 +88,7 @@ From there, load the rule entrypoints you need:
 
 - A **capability** is a narrow, cohesive workflow surface such as `quality`, `protobuf`, or `workspace`.
 - A **managed tool** is a binary installed through a module extension and imported into the repo with `use_repo`, rather than something users are expected to preinstall manually.
-- A **source-tree-writing** rule is a runnable target that intentionally updates files in `BUILD_WORKSPACE_DIRECTORY`. `go_fmt`, `buf_generate`, and `workspace_sync` fall into this category.
+- A **source-tree-writing** rule is a runnable target that intentionally updates files in `BUILD_WORKSPACE_DIRECTORY`. `go_fmt` and `workspace_sync` in this repo, and upstream tools such as `buf_format`, fall into this category.
 - Public APIs stay small on purpose. If a workflow needs more policy, it should usually live in the caller's config files or surrounding BUILD logic rather than in a wide Bazel abstraction layer here.
 
 ## Documentation Map
@@ -121,6 +105,6 @@ From there, load the rule entrypoints you need:
 - [examples/quality/shell](examples/quality/shell): `shell_lint`
 - [examples/quality/web](examples/quality/web): `web_fmt`, `web_fmt_check`, and `web_lint`
 - [examples/web/vite](examples/web/vite): `web_install`, `web_build`, `web_typecheck`, `web_test`, `web_browser_install`, and `web_e2e`
-- [examples/protobuf](examples/protobuf): Buf formatting, linting, breaking, generate, and dep update workflows
+- [examples/protobuf](examples/protobuf): official `rules_buf` + Gazelle setup for `proto_library`, `buf_lint_test`, `buf_breaking_test`, and `buf_format`
 - [examples/modelgen](examples/modelgen): launcher wiring for `codesjoy-modelgen`
 - [examples/workspace](examples/workspace): `workspace_sync` with a follow-up executable target

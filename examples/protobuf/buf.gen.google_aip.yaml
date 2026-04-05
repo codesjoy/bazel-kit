@@ -1,6 +1,0 @@
-version: v2
-plugins:
-  - local: protoc-gen-google-aip
-    out: ./examples/protobuf/gen/google_aip
-    opt:
-      - paths=source_relative

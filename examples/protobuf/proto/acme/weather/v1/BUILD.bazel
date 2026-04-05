@@ -1,0 +1,16 @@
+load("@rules_buf//buf:defs.bzl", "buf_lint_test")
+load("@rules_proto//proto:defs.bzl", "proto_library")
+
+proto_library(
+    name = "acme_weather_v1_proto",
+    srcs = ["weather.proto"],
+    strip_import_prefix = "/examples/protobuf/proto",
+    visibility = ["//visibility:public"],
+)
+
+buf_lint_test(
+    name = "acme_weather_v1_proto_lint",
+    config = "//examples/protobuf:buf.yaml",
+    module = "proto",
+    targets = [":acme_weather_v1_proto"],
+)

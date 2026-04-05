@@ -4,8 +4,10 @@ module(
 )
 
 bazel_dep(name = "rules_go", version = "0.60.0")
-bazel_dep(name = "gazelle", version = "0.47.0")
+bazel_dep(name = "gazelle", version = "0.47.0", repo_name = "bazel_gazelle")
 bazel_dep(name = "platforms", version = "1.0.0")
+bazel_dep(name = "rules_buf", version = "0.5.2")
+bazel_dep(name = "rules_proto", version = "7.1.0")
 bazel_dep(name = "rules_shell", version = "0.6.1")
 
 go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")
@@ -17,13 +19,10 @@ quality_tools.install(domains = ["go", "shell", "web"])
 web_tools = use_extension("//rules/web:extensions.bzl", "web_tools")
 web_tools.install()
 
-protobuf_tools = use_extension("//rules/protobuf:extensions.bzl", "protobuf_tools")
-protobuf_tools.install(
-    plugins = [
-        "codesjoy_event",
-        "codesjoy_reason",
-        "google_aip",
-    ],
+buf = use_extension("@rules_buf//buf:extensions.bzl", "buf")
+buf.toolchains(
+    version = "v1.47.2",
+    sha256 = "1b37b75dc0a777a0cba17fa2604bc9906e55bb4c578823d8b7a8fe3fc9fe4439",
 )
 
 modelgen_tools = use_extension("//rules/modelgen:extensions.bzl", "modelgen_tools")
@@ -46,13 +45,9 @@ use_repo(
     "web_tool_pnpm",
 )
 
-use_repo(
-    protobuf_tools,
-    "protobuf_tool_buf",
-    "protobuf_tool_protoc_gen_codesjoy_event",
-    "protobuf_tool_protoc_gen_codesjoy_reason",
-    "protobuf_tool_protoc_gen_google_aip",
-)
+use_repo(buf, "rules_buf_toolchains")
+
+register_toolchains("@rules_buf_toolchains//:all")
 
 use_repo(
     modelgen_tools,

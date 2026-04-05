@@ -7,13 +7,13 @@ import subprocess
 import sys
 from typing import Optional
 
-GLOBAL_IMPACT_FILES = {
+DEFAULT_GLOBAL_IMPACT_FILES = {
     ".bazelrc",
     "MODULE.bazel",
     "MODULE.bazel.lock",
 }
 
-GLOBAL_IMPACT_PREFIXES = [
+DEFAULT_GLOBAL_IMPACT_PREFIXES = [
     ".github/workflows/",
 ]
 
@@ -54,6 +54,22 @@ def load_catalog() -> dict:
         fail("PIPELINE_CATALOG is required")
     with open(catalog_path, "r", encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def catalog_subjects(catalog: dict) -> list[dict]:
+    return list(catalog.get("services", [])) + list(catalog.get("components", []))
+
+
+def global_impact_files(catalog: dict) -> set[str]:
+    return DEFAULT_GLOBAL_IMPACT_FILES.union(catalog.get("global_impact_files", []))
+
+
+def global_impact_prefixes(catalog: dict) -> list[str]:
+    prefixes = list(DEFAULT_GLOBAL_IMPACT_PREFIXES)
+    for prefix in catalog.get("global_impact_prefixes", []):
+        if prefix not in prefixes:
+            prefixes.append(prefix)
+    return prefixes
 
 
 def workspace_dir() -> pathlib.Path:
@@ -132,10 +148,15 @@ def package_for_path(relpath: str, workspace: pathlib.Path) -> Optional[str]:
         current = current.parent
 
 
-def expression_for_path(relpath: str, workspace: pathlib.Path) -> Optional[str]:
-    if relpath in GLOBAL_IMPACT_FILES:
+def expression_for_path(
+    relpath: str,
+    workspace: pathlib.Path,
+    global_files: set[str],
+    global_prefixes: list[str],
+) -> Optional[str]:
+    if relpath in global_files:
         return "//..."
-    for prefix in GLOBAL_IMPACT_PREFIXES:
+    for prefix in global_prefixes:
         if relpath.startswith(prefix):
             return "//..."
 
@@ -156,21 +177,21 @@ def expression_for_path(relpath: str, workspace: pathlib.Path) -> Optional[str]:
     return f"//{package}:{target_name}" if package else f"//:{target_name}"
 
 
-def query_affected_service_labels(
+def query_affected_subject_labels(
     changed_expressions: list[str],
-    service_labels: list[str],
+    subject_labels: list[str],
     workspace: pathlib.Path,
 ) -> list[str]:
-    if not changed_expressions or not service_labels:
+    if not changed_expressions or not subject_labels:
         return []
     if "//..." in changed_expressions:
-        return service_labels
+        return subject_labels
 
     query = "(rdeps(//..., {changed})) intersect ({services})".format(
         changed=" + ".join(changed_expressions),
-        services=" + ".join(service_labels),
+        services=" + ".join(subject_labels),
     )
-    info("Running bazel query for affected pipeline services")
+    info("Running bazel query for affected pipeline subjects")
     result = subprocess.run(
         [tool_path("PIPELINE_BAZEL_BIN", "bazel"), "query", "--keep_going", "--noshow_progress", query],
         cwd=workspace,
@@ -189,45 +210,67 @@ def query_affected_service_labels(
     return labels
 
 
-def service_row(service: dict, baseline_environment: str) -> dict:
-    deploy_environments = service.get("deploy_environments", [])
-    runtime_deps = service.get("runtime_deps", [])
-    return {
-        "service": service["service_name"],
-        "label": service["label"],
-        "language": service["language"],
-        "workload_kind": service["workload_kind"],
-        "preview_mode": service["preview_mode"],
-        "render_target": service["render_target"],
+def subject_row(subject: dict, baseline_environment: str) -> dict:
+    row = {
+        "subject_kind": subject["subject_kind"],
+        "subject_name": subject["subject_name"],
+        "label": subject["label"],
+        "language": subject["language"],
         "baseline_environment": baseline_environment,
-        "runtime_deps_csv": ",".join(runtime_deps),
-        "runtime_deps_json": json.dumps(runtime_deps, separators=(",", ":")),
-        "deploy_environments_csv": ",".join(deploy_environments),
-        "deploy_environments_json": json.dumps(deploy_environments, separators=(",", ":")),
+        "owners": subject.get("owners", []),
+        "owners_csv": ",".join(subject.get("owners", [])),
+    }
+    if subject["subject_kind"] == "service":
+        deploy_environments = subject.get("deploy_environments", [])
+        runtime_deps = subject.get("runtime_deps", [])
+        row.update({
+            "service": subject["service_name"],
+            "render_target": subject["render_target"],
+            "preview_mode": subject["preview_mode"],
+            "workload_kind": subject["workload_kind"],
+            "runtime_deps_csv": ",".join(runtime_deps),
+            "runtime_deps_json": json.dumps(runtime_deps, separators=(",", ":")),
+            "deploy_environments_csv": ",".join(deploy_environments),
+            "deploy_environments_json": json.dumps(deploy_environments, separators=(",", ":")),
+        })
+    return row
+
+
+def component_matrix(components: list[dict], baseline_environment: str) -> dict:
+    return {
+        "include": [subject_row(component, baseline_environment) for component in components],
     }
 
 
-def stage_matrix(services: list[dict], stage: str, baseline_environment: str) -> dict:
+def stage_matrix(subjects: list[dict], stage: str, baseline_environment: str) -> dict:
     if stage == "render":
-        accessor = lambda service: [service["render_target"]]
+        accessor = lambda subject: [subject["render_target"]] if subject["subject_kind"] == "service" and subject["render_target"] else []
+    elif stage == "image":
+        accessor = lambda subject: subject.get("image_targets", []) if subject["subject_kind"] == "service" else []
     else:
-        accessor = lambda service: service.get(f"{stage}_targets", [])
+        accessor = lambda subject: subject.get(f"{stage}_targets", [])
 
     included = []
     seen: dict[str, dict] = {}
-    for service in services:
-        for target in accessor(service):
+    for subject in subjects:
+        for target in accessor(subject):
             if not target:
                 continue
             entry = seen.get(target)
             if entry is None:
-                entry = service_row(service, baseline_environment)
+                entry = subject_row(subject, baseline_environment)
                 entry["target"] = target
-                entry["owners"] = [service["service_name"]]
+                entry["owners"] = list(subject.get("owners", []))
+                if subject["subject_name"] not in entry["owners"]:
+                    entry["owners"].append(subject["subject_name"])
                 seen[target] = entry
                 included.append(entry)
-            elif service["service_name"] not in entry["owners"]:
-                entry["owners"].append(service["service_name"])
+            else:
+                for owner in subject.get("owners", []):
+                    if owner not in entry["owners"]:
+                        entry["owners"].append(owner)
+                if subject["subject_name"] not in entry["owners"]:
+                    entry["owners"].append(subject["subject_name"])
 
     for entry in included:
         entry["owners_csv"] = ",".join(entry["owners"])
@@ -241,11 +284,14 @@ def build_output(
     changed_expressions: list[str],
     baseline_environment: str,
 ) -> dict:
-    services_by_label = {service["label"]: service for service in catalog.get("services", [])}
-    affected_services = []
-    for service in catalog.get("services", []):
-        if service["label"] in affected_labels:
-            affected_services.append(service)
+    subjects = catalog_subjects(catalog)
+    subjects_by_label = {subject["label"]: subject for subject in subjects}
+    affected_subjects = []
+    for subject in subjects:
+        if subject["label"] in affected_labels:
+            affected_subjects.append(subject)
+    affected_services = [subject for subject in affected_subjects if subject["subject_kind"] == "service"]
+    affected_components = [subject for subject in affected_subjects if subject["subject_kind"] == "component"]
 
     return {
         "version": 1,
@@ -255,22 +301,27 @@ def build_output(
         "changed_expressions": changed_expressions,
         "affected_service_labels": [service["label"] for service in affected_services],
         "affected_service_names": [service["service_name"] for service in affected_services],
-        "empty": len(affected_services) == 0,
+        "affected_component_names": [component["subject_name"] for component in affected_components],
+        "empty": len(affected_subjects) == 0,
         "service_matrix": {
-            "include": [service_row(service, baseline_environment) for service in affected_services],
+            "include": [subject_row(service, baseline_environment) for service in affected_services],
         },
-        "lint_matrix": stage_matrix(affected_services, "lint", baseline_environment),
-        "unit_matrix": stage_matrix(affected_services, "unit", baseline_environment),
-        "integration_matrix": stage_matrix(affected_services, "integration", baseline_environment),
+        "component_matrix": component_matrix(affected_components, baseline_environment),
+        "lint_matrix": stage_matrix(affected_subjects, "lint", baseline_environment),
+        "unit_matrix": stage_matrix(affected_subjects, "unit", baseline_environment),
+        "integration_matrix": stage_matrix(affected_subjects, "integration", baseline_environment),
         "image_matrix": stage_matrix(affected_services, "image", baseline_environment),
         "render_matrix": stage_matrix(affected_services, "render", baseline_environment),
         "services_by_label": {
             label: {
-                "service_name": service["service_name"],
-                "language": service["language"],
-                "preview_mode": service["preview_mode"],
+                "subject_kind": subject["subject_kind"],
+                "subject_name": subject["subject_name"],
+                "service_name": subject["service_name"],
+                "language": subject["language"],
+                "preview_mode": subject["preview_mode"],
+                "owners": subject.get("owners", []),
             }
-            for label, service in services_by_label.items()
+            for label, subject in subjects_by_label.items()
         },
     }
 
@@ -291,17 +342,19 @@ def main() -> None:
     workspace = workspace_dir()
     changed_files = load_changed_files(args, workspace)
     changed_expressions = []
+    impact_files = global_impact_files(catalog)
+    impact_prefixes = global_impact_prefixes(catalog)
 
     for path in changed_files:
-        expression = expression_for_path(path, workspace)
+        expression = expression_for_path(path, workspace, impact_files, impact_prefixes)
         if expression is None:
             warn(f"Skipping changed path outside a Bazel package: {path}")
             continue
         if expression not in changed_expressions:
             changed_expressions.append(expression)
 
-    service_labels = [service["label"] for service in catalog.get("services", [])]
-    affected_labels = query_affected_service_labels(changed_expressions, service_labels, workspace)
+    subject_labels = [subject["label"] for subject in catalog_subjects(catalog)]
+    affected_labels = query_affected_subject_labels(changed_expressions, subject_labels, workspace)
     payload = build_output(
         catalog = catalog,
         affected_labels = affected_labels,

@@ -40,6 +40,7 @@ Load the public entrypoints from:
 load(
     "@codesjoy_bazel_kit//rules/pipeline:defs.bzl",
     "pipeline_catalog",
+    "pipeline_component",
     "pipeline_helm_render",
     "pipeline_plan",
     "pipeline_service",
@@ -63,10 +64,26 @@ Optional attrs:
 - `service_name`, default the target name
 - `analysis_targets`
 - `integration_targets`
+- `owners`
 - `runtime_deps`
 - `workload_kind`, default `deployment`, also supports `worker`
 - `preview_mode`, default `shared_baseline`, also supports `full_isolated`
 - `deploy_environments`, default `["dev", "staging", "prod"]`
+
+### `pipeline_component`
+
+`pipeline_component` declares a non-deployable subject that should still participate in impact analysis and shared quality stages.
+
+Optional attrs:
+
+- `component_name`, default the target name
+- `analysis_targets`
+- `lint_targets`
+- `unit_targets`
+- `integration_targets`
+- `owners`
+
+At least one of `lint_targets`, `unit_targets`, or `integration_targets` is required. Components do not support deploy, image, render, or runtime dependency attrs.
 
 ### `analysis_targets`
 
@@ -74,15 +91,18 @@ Impact analysis is only as good as the Bazel graph edges you expose. If your lin
 
 ### `pipeline_catalog`
 
-`pipeline_catalog` exports the declared services into a stable JSON file. That file is what GitHub workflows and helper scripts consume to build matrices and resolve render targets.
+`pipeline_catalog` exports the declared services and components into a stable JSON file. That file is what GitHub workflows and helper scripts consume to build matrices and resolve render targets.
 
 Optional attr:
 
 - `repo_config`: a repo-owned JSON file with GitOps, environment, and image repository settings
+- `components`: additional `pipeline_component` targets to include in the catalog
+- `global_impact_files`: workspace-relative file paths that should expand to a full plan
+- `global_impact_prefixes`: workspace-relative directory prefixes that should expand to a full plan
 
 ### `pipeline_plan`
 
-`pipeline_plan` is a runnable target that expands affected services and stage matrices.
+`pipeline_plan` is a runnable target that expands affected services, components, and stage matrices.
 
 Supported runtime args:
 
@@ -92,14 +112,24 @@ Supported runtime args:
 - `--baseline-environment <env>`, default `itest-baseline`
 - `--output <file>`
 
-The runner maps changed files to Bazel package expressions, queries reverse dependencies, intersects the result with the service labels from the catalog, and emits a JSON payload with:
+The runner maps changed files to Bazel package expressions, queries reverse dependencies, intersects the result with the catalog labels, and emits a JSON payload with:
 
 - `service_matrix`
+- `component_matrix`
 - `lint_matrix`
 - `unit_matrix`
 - `integration_matrix`
 - `image_matrix`
 - `render_matrix`
+
+`service_matrix` remains deployable services only. `component_matrix` contains non-deployable component rows. `lint_matrix`, `unit_matrix`, and `integration_matrix` can contain both kinds via shared fields:
+
+- `subject_kind`
+- `subject_name`
+- `owners`
+- `owners_csv`
+
+Service rows also keep the existing deploy-specific fields such as `service`, `render_target`, `preview_mode`, and `runtime_deps_json`.
 
 ### `pipeline_helm_render`
 
@@ -201,6 +231,7 @@ The intended model is:
 - The launchers resolve a Python 3 interpreter on Windows, macOS, and Linux before dispatching to the repo-owned Python entrypoints.
 - `shared_baseline` preview mode routes declared `runtime_deps` to the configured baseline environment.
 - `full_isolated` preview mode is intended for independently deployable apps or workers that do not need shared baseline routing.
+- `global_impact_files` and `global_impact_prefixes` extend the built-in full-impact defaults for `.bazelrc`, `MODULE.bazel`, `MODULE.bazel.lock`, and `.github/workflows/`.
 
 ## Example Targets
 

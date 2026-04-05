@@ -1,5 +1,5 @@
 load("@rules_go//go:def.bzl", "go_binary", "go_test")
-load("//rules/pipeline:defs.bzl", "pipeline_catalog", "pipeline_helm_render", "pipeline_plan", "pipeline_service")
+load("//rules/pipeline:defs.bzl", "pipeline_catalog", "pipeline_component", "pipeline_helm_render", "pipeline_plan", "pipeline_service")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -27,6 +27,14 @@ filegroup(
 filegroup(
     name = "worker_graph",
     srcs = glob(["testdata/services/worker/**"]),
+)
+
+filegroup(
+    name = "contracts_component_graph",
+    srcs = [
+        ":shared_contracts",
+        "testdata/components/contracts/README.md",
+    ],
 )
 
 go_test(
@@ -84,6 +92,21 @@ go_test(
     srcs = ["ok_test.go"],
 )
 
+go_test(
+    name = "contracts_lint",
+    srcs = ["ok_test.go"],
+)
+
+go_test(
+    name = "contracts_unit",
+    srcs = ["ok_test.go"],
+)
+
+go_test(
+    name = "contracts_integration",
+    srcs = ["ok_test.go"],
+)
+
 go_binary(
     name = "worker_image",
     embed = ["//tools/testhelpers/fakecmd:fakecmd_lib"],
@@ -132,6 +155,7 @@ pipeline_service(
     unit_targets = [":api_unit"],
     integration_targets = [":api_integration"],
     image_targets = [":api_image"],
+    owners = ["team-api"],
     render_target = ":api_render",
     runtime_deps = ["web"],
 )
@@ -145,6 +169,7 @@ pipeline_service(
     unit_targets = [":web_unit"],
     integration_targets = [":web_integration"],
     image_targets = [":web_image"],
+    owners = ["team-web"],
     render_target = ":web_render",
     runtime_deps = ["api"],
 )
@@ -158,10 +183,21 @@ pipeline_service(
     unit_targets = [":worker_unit"],
     integration_targets = [":worker_integration"],
     image_targets = [":worker_image"],
+    owners = ["team-worker"],
     render_target = ":worker_render",
     preview_mode = "full_isolated",
     runtime_deps = [],
     workload_kind = "worker",
+)
+
+pipeline_component(
+    name = "contracts_component",
+    component_name = "contracts",
+    analysis_targets = [":contracts_component_graph"],
+    lint_targets = [":contracts_lint"],
+    unit_targets = [":contracts_unit"],
+    integration_targets = [":contracts_integration"],
+    owners = ["team-platform"],
 )
 
 pipeline_catalog(
@@ -171,6 +207,9 @@ pipeline_catalog(
         ":web_service",
         ":worker_service",
     ],
+    components = [":contracts_component"],
+    global_impact_files = ["rules/pipeline/private/testdata/global-impact.txt"],
+    global_impact_prefixes = ["rules/pipeline/private/testdata/global/"],
 )
 
 pipeline_plan(

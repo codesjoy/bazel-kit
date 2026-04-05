@@ -1,3 +1,5 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_test")
+
 package(default_visibility = ["//visibility:public"])
 
 exports_files([
@@ -7,3 +9,59 @@ exports_files([
     "pipeline/invoke_image_target.py",
     "pipeline/render_to_gitops.py",
 ])
+
+go_binary(
+    name = "fake_bazel",
+    embed = ["//tools/testhelpers/fakecmd:fakecmd_lib"],
+)
+
+go_test(
+    name = "invoke_image_target_test",
+    srcs = [
+        "pipeline_test_helpers_test.go",
+        "invoke_image_target_test.go",
+    ],
+    args = [
+        "$(location pipeline/invoke_image_target.py)",
+        "$(location :fake_bazel)",
+    ],
+    data = [
+        "pipeline/invoke_image_target.py",
+        ":fake_bazel",
+    ],
+    deps = ["//tools/testhelpers/testutil"],
+)
+
+go_test(
+    name = "render_to_gitops_test",
+    srcs = [
+        "pipeline_test_helpers_test.go",
+        "render_to_gitops_test.go",
+    ],
+    args = [
+        "$(location pipeline/render_to_gitops.py)",
+        "$(location :fake_bazel)",
+    ],
+    data = [
+        "pipeline/render_to_gitops.py",
+        ":fake_bazel",
+    ],
+    deps = ["//tools/testhelpers/testutil"],
+)
+
+go_test(
+    name = "gitops_scripts_test",
+    srcs = [
+        "pipeline_test_helpers_test.go",
+        "gitops_scripts_test.go",
+    ],
+    args = [
+        "$(location pipeline/gitops_commit.py)",
+        "$(location pipeline/cleanup_gitops.py)",
+    ],
+    data = [
+        "pipeline/gitops_commit.py",
+        "pipeline/cleanup_gitops.py",
+    ],
+    deps = ["//tools/testhelpers/testutil"],
+)

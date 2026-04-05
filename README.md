@@ -48,7 +48,7 @@ The repository is organized around capability-focused, runnable workflows rather
 
 ### `pipeline`
 
-`pipeline` provides a Bazel-driven CI/CD orchestration layer for monorepos and microservices. It exposes service declarations, a catalog export, impact analysis, Helm rendering, and reusable GitHub Actions + Argo CD integration helpers. Read [docs/pipeline.md](docs/pipeline.md) and inspect [examples/pipeline/monorepo](examples/pipeline/monorepo).
+`pipeline` provides a Bazel-driven CI/CD orchestration layer for monorepos and microservices. It exposes deployable service declarations, non-deployable component declarations, a catalog export, impact analysis, Helm rendering, and reusable GitHub Actions + Argo CD integration helpers. Read [docs/pipeline.md](docs/pipeline.md) and inspect [examples/pipeline/monorepo](examples/pipeline/monorepo).
 
 ## Quick Start
 
@@ -130,7 +130,7 @@ For protobuf, use upstream `rules_buf` directly instead of a `bazel-kit` wrapper
 | `migrate` | `migrate_up`, `migrate_down`, `migrate_version`, `migrate_force` | `migrate` | no repo writes by default | reachable database; prefer `dsn_env` for secrets | `//examples/migrate:up`, `//examples/migrate:version` |
 | `changelog` | `changelog_init`, `changelog_generate`, `changelog_preview`, `changelog_verify`, `changelog_state_print`, `changelog_state_reset` | `git-chglog` | yes; scaffold init and changelog generation update repo files | `git`; repo-owned commit history | `//examples/changelog:init`, `//examples/changelog:generate` |
 | `copyright` | `copyright_add`, `copyright_verify` | `addlicense` | `copyright_add` writes source headers | repo-owned boilerplate template | `//examples/copyright:add`, `//examples/copyright:verify` |
-| `pipeline` | `pipeline_service`, `pipeline_catalog`, `pipeline_plan`, `pipeline_helm_render` | `helm` | `pipeline_helm_render` writes rendered manifests to an explicit output directory; GitOps helper scripts update external repos | Python 3, `bazel`, optional `git`, and Helm through `pipeline_tools` | `//examples/pipeline/monorepo:plan`, `//examples/pipeline/monorepo:api_render` |
+| `pipeline` | `pipeline_service`, `pipeline_component`, `pipeline_catalog`, `pipeline_plan`, `pipeline_helm_render` | `helm` | `pipeline_helm_render` writes rendered manifests to an explicit output directory; GitOps helper scripts update external repos | Python 3, `bazel`, optional `git`, and Helm through `pipeline_tools` | `//examples/pipeline/monorepo:plan`, `//examples/pipeline/monorepo:api_render` |
 
 ## Design Conventions
 

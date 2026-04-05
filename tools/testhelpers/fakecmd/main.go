@@ -115,6 +115,12 @@ func handleFakeBazel() {
 	switch command {
 	case "run", "test", "build":
 		appendLine(logFile, command+" "+strings.Join(args[1:], " "))
+		if command == "run" {
+			if err := maybeHandleFakeBazelRun(workspace, args[1:]); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+		}
 	case "coverage":
 		appendLine(logFile, "coverage "+strings.Join(args[1:], " "))
 		coverageDir := filepath.Join(outputPath, "_coverage")
@@ -140,6 +146,9 @@ func handleFakeBazel() {
 		case strings.Contains(query, "testdata/shared/contracts/schema.json"):
 			fmt.Println("//rules/pipeline/private:api_service")
 			fmt.Println("//rules/pipeline/private:web_service")
+			fmt.Println("//rules/pipeline/private:contracts_component")
+		case strings.Contains(query, "testdata/components/contracts/README.md"):
+			fmt.Println("//rules/pipeline/private:contracts_component")
 		case strings.Contains(query, "testdata/services/web/src/main.ts"):
 			fmt.Println("//rules/pipeline/private:web_service")
 		}
@@ -147,6 +156,173 @@ func handleFakeBazel() {
 		fmt.Fprintf(os.Stderr, "unsupported fake bazel command: %s\n", command)
 		os.Exit(1)
 	}
+}
+
+func maybeHandleFakeBazelRun(workspace string, args []string) error {
+	if len(args) == 0 {
+		return nil
+	}
+	target := args[0]
+	forwarded := forwardedArgs(args[1:])
+	if len(forwarded) == 0 {
+		return nil
+	}
+
+	switch {
+	case strings.Contains(target, "image"):
+		return writeFakeImageDigest(serviceNameFromTarget(target, "_image"), forwarded)
+	case strings.Contains(target, "render"):
+		return writeFakeRenderOutput(workspace, serviceNameFromTarget(target, "_render"), forwarded)
+	default:
+		return nil
+	}
+}
+
+func forwardedArgs(args []string) []string {
+	for index, arg := range args {
+		if arg == "--" {
+			return args[index+1:]
+		}
+	}
+	return nil
+}
+
+func serviceNameFromTarget(target, suffix string) string {
+	parts := strings.Split(target, ":")
+	name := parts[len(parts)-1]
+	if strings.HasSuffix(name, suffix) {
+		return strings.TrimSuffix(name, suffix)
+	}
+	return name
+}
+
+func writeFakeRenderOutput(workspace, service string, args []string) error {
+	outputDir := ""
+	environment := ""
+	namespace := ""
+	host := ""
+	imageRepository := ""
+	imageTag := ""
+	imageDigest := ""
+	previewID := ""
+	baselineEnvironment := ""
+	runtimeDeps := map[string]string{}
+
+	for index := 0; index < len(args); index++ {
+		switch args[index] {
+		case "--output-dir":
+			index++
+			outputDir = args[index]
+		case "--environment":
+			index++
+			environment = args[index]
+		case "--namespace":
+			index++
+			namespace = args[index]
+		case "--host":
+			index++
+			host = args[index]
+		case "--image-repository":
+			index++
+			imageRepository = args[index]
+		case "--image-tag":
+			index++
+			imageTag = args[index]
+		case "--image-digest":
+			index++
+			imageDigest = args[index]
+		case "--preview-id":
+			index++
+			previewID = args[index]
+		case "--baseline-environment":
+			index++
+			baselineEnvironment = args[index]
+		case "--runtime-dependency":
+			index++
+			name, url, ok := strings.Cut(args[index], "=")
+			if !ok {
+				return fmt.Errorf("invalid runtime dependency %q", args[index])
+			}
+			runtimeDeps[name] = url
+		}
+	}
+	if outputDir == "" {
+		return fmt.Errorf("render target missing --output-dir")
+	}
+	if namespace == "" {
+		namespace = environment + "-" + service
+	}
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+		return err
+	}
+	manifest := []string{
+		fmt.Sprintf("release: %s", service),
+		fmt.Sprintf("namespace: %s", namespace),
+		fmt.Sprintf("previewEnabled: %v", previewID != ""),
+	}
+	if host != "" {
+		manifest = append(manifest, host)
+	}
+	if imageRepository != "" {
+		manifest = append(manifest, fmt.Sprintf("\"repository\": %q", imageRepository))
+	}
+	if imageTag != "" {
+		manifest = append(manifest, fmt.Sprintf("\"tag\": %q", imageTag))
+	}
+	if imageDigest != "" {
+		manifest = append(manifest, fmt.Sprintf("\"digest\": %q", imageDigest))
+	}
+	if previewID != "" {
+		manifest = append(manifest, fmt.Sprintf("\"previewId\": %q", previewID))
+	}
+	if baselineEnvironment != "" {
+		manifest = append(manifest, fmt.Sprintf("\"baselineEnvironment\": %q", baselineEnvironment))
+	}
+	for name, url := range runtimeDeps {
+		manifest = append(manifest, fmt.Sprintf("\"%s\": %q", name, url))
+	}
+	if err := os.WriteFile(filepath.Join(outputDir, "manifest.yaml"), []byte(strings.Join(manifest, "\n")+"\n"), 0o644); err != nil {
+		return err
+	}
+	metadata := map[string]any{
+		"service":     service,
+		"environment": environment,
+		"namespace":   namespace,
+		"manifest":    filepath.Join(outputDir, "manifest.yaml"),
+		"workspace":   workspace,
+	}
+	data, err := json.MarshalIndent(metadata, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(outputDir, "metadata.json"), append(data, '\n'), 0o644)
+}
+
+func writeFakeImageDigest(service string, args []string) error {
+	imageRepository := ""
+	imageTag := ""
+	digestFile := ""
+	for index := 0; index < len(args); index++ {
+		switch args[index] {
+		case "--image-repository":
+			index++
+			imageRepository = args[index]
+		case "--image-tag":
+			index++
+			imageTag = args[index]
+		case "--digest-file":
+			index++
+			digestFile = args[index]
+		default:
+			return fmt.Errorf("unexpected arg: %s", args[index])
+		}
+	}
+	if imageRepository == "" || imageTag == "" || digestFile == "" {
+		return fmt.Errorf("image_runner requires --image-repository, --image-tag, and --digest-file")
+	}
+	sum := sha256.Sum256([]byte(service + ":" + imageRepository + ":" + imageTag))
+	digest := "sha256:" + hex.EncodeToString(sum[:])
+	return os.WriteFile(digestFile, []byte(digest+"\n"), 0o644)
 }
 
 func handleFakeWire() {
@@ -275,32 +451,23 @@ func mapStringMap(value any) map[string]string {
 }
 
 func handleFakeImage(service string) {
-	args := os.Args[1:]
+	if err := writeFakeImageDigest(service, os.Args[1:]); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	imageRepository := ""
 	imageTag := ""
-	digestFile := ""
-	for index := 0; index < len(args); index++ {
-		switch args[index] {
+	for index := 0; index < len(os.Args[1:]); index++ {
+		switch os.Args[index+1] {
 		case "--image-repository":
 			index++
-			imageRepository = args[index]
+			imageRepository = os.Args[index+1]
 		case "--image-tag":
 			index++
-			imageTag = args[index]
-		case "--digest-file":
-			index++
-			digestFile = args[index]
-		default:
-			fmt.Fprintf(os.Stderr, "unexpected arg: %s\n", args[index])
-			os.Exit(1)
+			imageTag = os.Args[index+1]
 		}
-	}
-	if imageRepository == "" || imageTag == "" || digestFile == "" {
-		fmt.Fprintln(os.Stderr, "image_runner requires --image-repository, --image-tag, and --digest-file")
-		os.Exit(1)
 	}
 	sum := sha256.Sum256([]byte(service + ":" + imageRepository + ":" + imageTag))
 	digest := "sha256:" + hex.EncodeToString(sum[:])
-	_ = os.WriteFile(digestFile, []byte(digest+"\n"), 0o644)
 	fmt.Fprintf(os.Stderr, "built %s -> %s@%s\n", service, imageRepository, digest)
 }

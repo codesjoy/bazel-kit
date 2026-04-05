@@ -1,5 +1,5 @@
-PipelineServiceInfo = provider(
-    doc = "Metadata exported by pipeline_service targets.",
+PipelineSubjectInfo = provider(
+    doc = "Metadata exported by pipeline service and component targets.",
     fields = {
         "analysis_targets": "Labels used to participate in Bazel impact analysis.",
         "deploy_environments": "Deployment environments for this service.",
@@ -8,9 +8,12 @@ PipelineServiceInfo = provider(
         "label": "The pipeline_service label.",
         "language": "Service language.",
         "lint_targets": "Lint targets.",
+        "owners": "Owning teams or components.",
         "preview_mode": "Preview environment strategy.",
         "render_target": "Manifest render target.",
         "runtime_deps": "Runtime dependency service names.",
+        "subject_kind": "Either service or component.",
+        "subject_name": "Stable subject name.",
         "service_name": "Stable service name.",
         "unit_targets": "Unit test targets.",
         "workload_kind": "Deployment workload kind.",
@@ -101,7 +104,7 @@ def _service_impl(ctx):
 
     return [
         DefaultInfo(),
-        PipelineServiceInfo(
+        PipelineSubjectInfo(
             analysis_targets = analysis_targets,
             deploy_environments = ctx.attr.deploy_environments,
             image_targets = sorted(ctx.attr.image_targets),
@@ -109,17 +112,48 @@ def _service_impl(ctx):
             label = _normalize_label_string(str(ctx.label)),
             language = ctx.attr.language,
             lint_targets = sorted(ctx.attr.lint_targets),
+            owners = sorted(ctx.attr.owners),
             preview_mode = ctx.attr.preview_mode,
             render_target = _normalize_label_string(ctx.attr.render_target),
             runtime_deps = sorted(ctx.attr.runtime_deps),
+            subject_kind = "service",
+            subject_name = service_name,
             service_name = service_name,
             unit_targets = sorted(ctx.attr.unit_targets),
             workload_kind = ctx.attr.workload_kind,
         ),
     ]
 
+def _component_impl(ctx):
+    component_name = ctx.attr.component_name if ctx.attr.component_name else ctx.label.name
+    analysis_targets = _target_labels(ctx.attr.analysis_targets)
+
+    return [
+        DefaultInfo(),
+        PipelineSubjectInfo(
+            analysis_targets = analysis_targets,
+            deploy_environments = [],
+            image_targets = [],
+            integration_targets = sorted(ctx.attr.integration_targets),
+            label = _normalize_label_string(str(ctx.label)),
+            language = "component",
+            lint_targets = sorted(ctx.attr.lint_targets),
+            owners = sorted(ctx.attr.owners),
+            preview_mode = "",
+            render_target = "",
+            runtime_deps = [],
+            subject_kind = "component",
+            subject_name = component_name,
+            service_name = "",
+            unit_targets = sorted(ctx.attr.unit_targets),
+            workload_kind = "",
+        ),
+    ]
+
 def _service_json(info):
     return """    {{
+      "subject_kind": {subject_kind},
+      "subject_name": {subject_name},
       "service_name": {service_name},
       "label": {label},
       "language": {language},
@@ -130,6 +164,7 @@ def _service_json(info):
       "image_targets": {image_targets},
       "render_target": {render_target},
       "runtime_deps": {runtime_deps},
+      "owners": {owners},
       "workload_kind": {workload_kind},
       "preview_mode": {preview_mode},
       "deploy_environments": {deploy_environments}
@@ -141,27 +176,40 @@ def _service_json(info):
         label = _json_string(info.label),
         language = _json_string(info.language),
         lint_targets = _json_list(info.lint_targets),
+        owners = _json_list(info.owners),
         preview_mode = _json_string(info.preview_mode),
         render_target = _json_string(info.render_target),
         runtime_deps = _json_list(info.runtime_deps),
+        subject_kind = _json_string(info.subject_kind),
+        subject_name = _json_string(info.subject_name),
         service_name = _json_string(info.service_name),
         unit_targets = _json_list(info.unit_targets),
         workload_kind = _json_string(info.workload_kind),
     )
 
 def _catalog_impl(ctx):
-    infos = [service[PipelineServiceInfo] for service in ctx.attr.services]
-    infos = sorted(infos, key = lambda info: info.service_name)
+    infos = [subject[PipelineSubjectInfo] for subject in ctx.attr.subjects]
+    services = sorted([info for info in infos if info.subject_kind == "service"], key = lambda info: info.subject_name)
+    components = sorted([info for info in infos if info.subject_kind == "component"], key = lambda info: info.subject_name)
     repo_config = ctx.file.repo_config.short_path if ctx.file.repo_config else ""
 
     lines = [
         "{",
         "  \"version\": 1,",
         "  \"repo_config\": %s," % _json_string(repo_config),
+        "  \"global_impact_files\": %s," % _json_list(ctx.attr.global_impact_files),
+        "  \"global_impact_prefixes\": %s," % _json_list(ctx.attr.global_impact_prefixes),
         "  \"services\": [",
     ]
-    for index, info in enumerate(infos):
-        suffix = "," if index < len(infos) - 1 else ""
+    for index, info in enumerate(services):
+        suffix = "," if index < len(services) - 1 else ""
+        lines.append(_service_json(info) + suffix)
+    lines.extend([
+        "  ],",
+        "  \"components\": [",
+    ])
+    for index, info in enumerate(components):
+        suffix = "," if index < len(components) - 1 else ""
         lines.append(_service_json(info) + suffix)
     lines.extend([
         "  ]",
@@ -243,6 +291,7 @@ pipeline_service_rule = rule(
         "image_targets": attr.string_list(),
         "render_target": attr.string(mandatory = True),
         "runtime_deps": attr.string_list(),
+        "owners": attr.string_list(),
         "workload_kind": attr.string(
             default = "deployment",
             values = ["deployment", "worker"],
@@ -255,11 +304,25 @@ pipeline_service_rule = rule(
     },
 )
 
+pipeline_component_rule = rule(
+    implementation = _component_impl,
+    attrs = {
+        "component_name": attr.string(),
+        "analysis_targets": attr.label_list(),
+        "lint_targets": attr.string_list(),
+        "unit_targets": attr.string_list(),
+        "integration_targets": attr.string_list(),
+        "owners": attr.string_list(),
+    },
+)
+
 pipeline_catalog = rule(
     implementation = _catalog_impl,
     attrs = {
-        "services": attr.label_list(providers = [PipelineServiceInfo], mandatory = True),
+        "subjects": attr.label_list(providers = [PipelineSubjectInfo], mandatory = True),
         "repo_config": attr.label(allow_single_file = True),
+        "global_impact_files": attr.string_list(),
+        "global_impact_prefixes": attr.string_list(),
     },
 )
 

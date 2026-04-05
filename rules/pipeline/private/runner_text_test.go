@@ -15,13 +15,16 @@ func TestRunnerText(t *testing.T) {
 	renderFile := os.Args[5]
 	versionsFile := os.Args[6]
 	testutil.AssertContains(t, defsFile, "def pipeline_service(")
+	testutil.AssertContains(t, defsFile, "def pipeline_component(")
 	testutil.AssertContains(t, defsFile, "pipeline_helm_render = _pipeline_helm_render")
 	testutil.AssertContains(t, extensionsFile, "pipeline_tools = module_extension(")
-	testutil.AssertContains(t, launcherFile, "PipelineServiceInfo = provider(")
+	testutil.AssertContains(t, launcherFile, "PipelineSubjectInfo = provider(")
+	testutil.AssertContains(t, launcherFile, "pipeline_component_rule = rule(")
 	testutil.AssertContains(t, launcherFile, "pipeline_plan = rule(")
 	testutil.AssertContains(t, launcherFile, "pipeline_helm_render = rule(")
 	testutil.AssertContains(t, launcherFile, "python-launch")
-	testutil.AssertContains(t, planFile, "def query_affected_service_labels(")
+	testutil.AssertContains(t, planFile, "def query_affected_subject_labels(")
+	testutil.AssertContains(t, planFile, "\"component_matrix\"")
 	testutil.AssertContains(t, planFile, "\"baseline_environment\"")
 	testutil.AssertContains(t, renderFile, "def override_payload(")
 	testutil.AssertContains(t, renderFile, "runtimeDependencies")

@@ -1,0 +1,38 @@
+load("@rules_go//go:def.bzl", "go_test")
+load("//rules/copyright:defs.bzl", "copyright_add", "copyright_verify")
+
+package(default_visibility = ["//visibility:public"])
+
+copyright_add(
+    name = "add_smoke_launcher",
+    boilerplate = "testdata/boilerplate.txt",
+)
+
+copyright_verify(
+    name = "verify_smoke_launcher",
+    boilerplate = "testdata/boilerplate.txt",
+)
+
+go_test(
+    name = "launcher_test",
+    srcs = ["launcher_test.go"],
+    data = [
+        "//rules/copyright:defs.bzl",
+        "//rules/copyright:extensions.bzl",
+        ":launcher.bzl",
+        "//tools/copyright:versions.bzl",
+        ":add_smoke_launcher",
+        ":verify_smoke_launcher",
+        "testdata/boilerplate.txt",
+    ],
+    args = [
+        "$(location //rules/copyright:defs.bzl)",
+        "$(location //rules/copyright:extensions.bzl)",
+        "$(location :launcher.bzl)",
+        "$(location //tools/copyright:versions.bzl)",
+        "$(location :add_smoke_launcher)",
+        "$(location :verify_smoke_launcher)",
+        "$(location testdata/boilerplate.txt)",
+    ],
+    deps = ["//tools/testhelpers/testutil"],
+)

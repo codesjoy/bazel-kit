@@ -1,0 +1,15 @@
+load("//rules/copyright:defs.bzl", "copyright_add", "copyright_verify")
+
+package(default_visibility = ["//visibility:public"])
+
+copyright_add(
+    name = "add",
+    boilerplate = "//scripts:boilerplate.txt",
+    roots = ["examples/copyright"],
+)
+
+copyright_verify(
+    name = "verify",
+    boilerplate = "//scripts:boilerplate.txt",
+    roots = ["examples/copyright"],
+)

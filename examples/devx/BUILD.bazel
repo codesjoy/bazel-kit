@@ -1,0 +1,34 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_test")
+load("//rules/devx:defs.bzl", "devx_doctor", "devx_workflow")
+
+package(default_visibility = ["//visibility:public"])
+
+go_binary(
+    name = "fmt_check",
+    embed = ["//tools/testhelpers/fakecmd:fakecmd_lib"],
+)
+
+go_test(
+    name = "unit",
+    srcs = ["ok_test.go"],
+)
+
+go_test(
+    name = "coverage",
+    srcs = ["ok_test.go"],
+)
+
+devx_workflow(
+    name = "check",
+    run_targets = ["//examples/devx:fmt_check"],
+    test_targets = ["//examples/devx:unit"],
+    coverage_targets = ["//examples/devx:coverage"],
+    coverage_threshold = 1,
+)
+
+devx_doctor(
+    name = "doctor",
+    required_commands = ["git", "bazel"],
+    verify_run_targets = ["//examples/devx:fmt_check"],
+    verify_test_targets = ["//examples/devx:unit"],
+)

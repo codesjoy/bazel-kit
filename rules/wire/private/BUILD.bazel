@@ -1,0 +1,48 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_test")
+load("//rules/wire:defs.bzl", "wire_check", "wire_diff", "wire_gen")
+
+package(default_visibility = ["//visibility:public"])
+
+go_binary(
+    name = "fake_wire",
+    embed = ["//tools/testhelpers/fakecmd:fakecmd_lib"],
+)
+
+wire_gen(
+    name = "gen_smoke_launcher",
+    tool_wire = ":fake_wire",
+)
+
+wire_diff(
+    name = "diff_smoke_launcher",
+    tool_wire = ":fake_wire",
+)
+
+wire_check(
+    name = "check_smoke_launcher",
+    tool_wire = ":fake_wire",
+)
+
+go_test(
+    name = "launcher_test",
+    srcs = ["launcher_test.go"],
+    data = [
+        "//rules/wire:defs.bzl",
+        "//rules/wire:extensions.bzl",
+        ":launcher.bzl",
+        "//tools/wire:versions.bzl",
+        ":gen_smoke_launcher",
+        ":diff_smoke_launcher",
+        ":check_smoke_launcher",
+    ],
+    args = [
+        "$(location //rules/wire:defs.bzl)",
+        "$(location //rules/wire:extensions.bzl)",
+        "$(location :launcher.bzl)",
+        "$(location //tools/wire:versions.bzl)",
+        "$(location :gen_smoke_launcher)",
+        "$(location :diff_smoke_launcher)",
+        "$(location :check_smoke_launcher)",
+    ],
+    deps = ["//tools/testhelpers/testutil"],
+)

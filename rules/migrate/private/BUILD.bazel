@@ -1,0 +1,61 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_test")
+load("//rules/migrate:defs.bzl", "migrate_down", "migrate_force", "migrate_up", "migrate_version")
+
+package(default_visibility = ["//visibility:public"])
+
+go_binary(
+    name = "fake_migrate",
+    embed = ["//tools/testhelpers/fakecmd:fakecmd_lib"],
+)
+
+migrate_up(
+    name = "up_smoke_launcher",
+    migrations_dir = "db/migrations",
+    tool_migrate = ":fake_migrate",
+)
+
+migrate_down(
+    name = "down_smoke_launcher",
+    migrations_dir = "db/migrations",
+    tool_migrate = ":fake_migrate",
+    down_steps = 2,
+)
+
+migrate_version(
+    name = "version_smoke_launcher",
+    migrations_dir = "db/migrations",
+    tool_migrate = ":fake_migrate",
+)
+
+migrate_force(
+    name = "force_smoke_launcher",
+    migrations_dir = "db/migrations",
+    force_version = "7",
+    tool_migrate = ":fake_migrate",
+)
+
+go_test(
+    name = "launcher_test",
+    srcs = ["launcher_test.go"],
+    data = [
+        "//rules/migrate:defs.bzl",
+        "//rules/migrate:extensions.bzl",
+        ":launcher.bzl",
+        "//tools/migrate:versions.bzl",
+        ":up_smoke_launcher",
+        ":down_smoke_launcher",
+        ":version_smoke_launcher",
+        ":force_smoke_launcher",
+    ],
+    args = [
+        "$(location //rules/migrate:defs.bzl)",
+        "$(location //rules/migrate:extensions.bzl)",
+        "$(location :launcher.bzl)",
+        "$(location //tools/migrate:versions.bzl)",
+        "$(location :up_smoke_launcher)",
+        "$(location :down_smoke_launcher)",
+        "$(location :version_smoke_launcher)",
+        "$(location :force_smoke_launcher)",
+    ],
+    deps = ["//tools/testhelpers/testutil"],
+)

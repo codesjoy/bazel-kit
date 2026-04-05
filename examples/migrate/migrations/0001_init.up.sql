@@ -1,0 +1,3 @@
+CREATE TABLE demo_users (
+  id BIGSERIAL PRIMARY KEY
+);

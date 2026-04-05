@@ -1,0 +1,41 @@
+load("@rules_go//go:def.bzl", "go_test")
+load("//rules/changelog:defs.bzl", "changelog_generate", "changelog_init", "changelog_preview", "changelog_state_print", "changelog_state_reset", "changelog_verify")
+
+package(default_visibility = ["//visibility:public"])
+
+changelog_init(name = "init_smoke_launcher")
+changelog_generate(name = "generate_smoke_launcher", use_baseline = False, query = "v0.1.0..")
+changelog_preview(name = "preview_smoke_launcher", use_baseline = False, query = "v0.1.0..")
+changelog_verify(name = "verify_smoke_launcher", use_baseline = False, query = "v0.1.0..")
+changelog_state_print(name = "state_print_smoke_launcher", use_baseline = False, query = "v0.1.0..")
+changelog_state_reset(name = "state_reset_smoke_launcher")
+
+go_test(
+    name = "launcher_test",
+    srcs = ["launcher_test.go"],
+    data = [
+        "//rules/changelog:defs.bzl",
+        "//rules/changelog:extensions.bzl",
+        ":launcher.bzl",
+        "//tools/changelog:versions.bzl",
+        ":init_smoke_launcher",
+        ":generate_smoke_launcher",
+        ":preview_smoke_launcher",
+        ":verify_smoke_launcher",
+        ":state_print_smoke_launcher",
+        ":state_reset_smoke_launcher",
+    ],
+    args = [
+        "$(location //rules/changelog:defs.bzl)",
+        "$(location //rules/changelog:extensions.bzl)",
+        "$(location :launcher.bzl)",
+        "$(location //tools/changelog:versions.bzl)",
+        "$(location :init_smoke_launcher)",
+        "$(location :generate_smoke_launcher)",
+        "$(location :preview_smoke_launcher)",
+        "$(location :verify_smoke_launcher)",
+        "$(location :state_print_smoke_launcher)",
+        "$(location :state_reset_smoke_launcher)",
+    ],
+    deps = ["//tools/testhelpers/testutil"],
+)

@@ -1,0 +1,9 @@
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "boilerplate.txt",
+    "pipeline/cleanup_gitops.py",
+    "pipeline/gitops_commit.py",
+    "pipeline/invoke_image_target.py",
+    "pipeline/render_to_gitops.py",
+])

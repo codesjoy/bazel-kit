@@ -35,6 +35,18 @@ modelgen_tools.install()
 pipeline_tools = use_extension("//rules/pipeline:extensions.bzl", "pipeline_tools")
 pipeline_tools.install()
 
+wire_tools = use_extension("//rules/wire:extensions.bzl", "wire_tools")
+wire_tools.install()
+
+migrate_tools = use_extension("//rules/migrate:extensions.bzl", "migrate_tools")
+migrate_tools.install()
+
+changelog_tools = use_extension("//rules/changelog:extensions.bzl", "changelog_tools")
+changelog_tools.install()
+
+copyright_tools = use_extension("//rules/copyright:extensions.bzl", "copyright_tools")
+copyright_tools.install()
+
 use_repo(
     quality_tools,
     "quality_tool_biome",
@@ -64,4 +76,24 @@ use_repo(
 use_repo(
     pipeline_tools,
     "pipeline_tool_helm",
+)
+
+use_repo(
+    wire_tools,
+    "wire_tool_wire",
+)
+
+use_repo(
+    migrate_tools,
+    "migrate_tool_migrate",
+)
+
+use_repo(
+    changelog_tools,
+    "changelog_tool_git_chglog",
+)
+
+use_repo(
+    copyright_tools,
+    "copyright_tool_addlicense",
 )

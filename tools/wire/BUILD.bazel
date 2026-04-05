@@ -1,0 +1,22 @@
+load("@rules_go//go:def.bzl", "go_test")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "repositories.bzl",
+    "versions.bzl",
+])
+
+go_test(
+    name = "text_test",
+    srcs = ["text_test.go"],
+    data = [
+        ":repositories.bzl",
+        ":versions.bzl",
+    ],
+    args = [
+        "$(location :repositories.bzl)",
+        "$(location :versions.bzl)",
+    ],
+    deps = ["//tools/testhelpers/testutil"],
+)

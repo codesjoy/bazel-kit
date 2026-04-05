@@ -1,0 +1,80 @@
+load("@rules_go//go:def.bzl", "go_binary", "go_test")
+load("//rules/devx:defs.bzl", "devx_doctor", "devx_workflow", "hooks_clean", "hooks_install", "hooks_run", "hooks_run_all", "hooks_verify")
+
+package(default_visibility = ["//visibility:public"])
+
+devx_workflow(
+    name = "workflow_smoke_launcher",
+    run_targets = ["//demo:fmt_check"],
+    test_targets = ["//demo:unit"],
+    coverage_targets = ["//demo:coverage"],
+    coverage_threshold = 60,
+    coverage_output_dir = "_output/coverage",
+    bazel_args = ["--color=no"],
+)
+
+devx_workflow(
+    name = "workflow_threshold_fail_launcher",
+    run_targets = ["//demo:fmt_check"],
+    test_targets = ["//demo:unit"],
+    coverage_targets = ["//demo:coverage"],
+    coverage_threshold = 80,
+    coverage_output_dir = "_output/coverage",
+)
+
+devx_doctor(
+    name = "doctor_smoke_launcher",
+    required_commands = ["git", "bazel"],
+    verify_run_targets = ["//demo:fmt_check"],
+    verify_test_targets = ["//demo:unit"],
+)
+
+hooks_install(name = "hooks_install_launcher")
+hooks_verify(name = "hooks_verify_launcher")
+hooks_run(name = "hooks_run_launcher")
+hooks_run_all(name = "hooks_run_all_launcher")
+hooks_clean(name = "hooks_clean_launcher")
+
+go_binary(
+    name = "fake_bazel",
+    embed = ["//tools/testhelpers/fakecmd:fakecmd_lib"],
+)
+
+go_binary(
+    name = "fake_pre_commit",
+    embed = ["//tools/testhelpers/fakecmd:fakecmd_lib"],
+)
+
+go_test(
+    name = "launcher_test",
+    srcs = ["launcher_test.go"],
+    data = [
+        "//rules/devx:defs.bzl",
+        ":launcher.bzl",
+        ":workflow_smoke_launcher",
+        ":workflow_threshold_fail_launcher",
+        ":doctor_smoke_launcher",
+        ":hooks_install_launcher",
+        ":hooks_verify_launcher",
+        ":hooks_run_launcher",
+        ":hooks_run_all_launcher",
+        ":hooks_clean_launcher",
+        ":fake_bazel",
+        ":fake_pre_commit",
+    ],
+    args = [
+        "$(location //rules/devx:defs.bzl)",
+        "$(location :launcher.bzl)",
+        "$(location :workflow_smoke_launcher)",
+        "$(location :workflow_threshold_fail_launcher)",
+        "$(location :doctor_smoke_launcher)",
+        "$(location :hooks_install_launcher)",
+        "$(location :hooks_verify_launcher)",
+        "$(location :hooks_run_launcher)",
+        "$(location :hooks_run_all_launcher)",
+        "$(location :hooks_clean_launcher)",
+        "$(location :fake_bazel)",
+        "$(location :fake_pre_commit)",
+    ],
+    deps = ["//tools/testhelpers/testutil"],
+)

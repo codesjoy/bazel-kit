@@ -1,0 +1,28 @@
+load("//rules/migrate:defs.bzl", "migrate_down", "migrate_force", "migrate_up", "migrate_version")
+
+package(default_visibility = ["//visibility:public"])
+
+migrate_up(
+    name = "up",
+    dsn_env = "DATABASE_DSN",
+    migrations_dir = "examples/migrate/migrations",
+)
+
+migrate_down(
+    name = "down",
+    dsn_env = "DATABASE_DSN",
+    migrations_dir = "examples/migrate/migrations",
+)
+
+migrate_version(
+    name = "version",
+    dsn_env = "DATABASE_DSN",
+    migrations_dir = "examples/migrate/migrations",
+)
+
+migrate_force(
+    name = "force",
+    dsn_env = "DATABASE_DSN",
+    migrations_dir = "examples/migrate/migrations",
+    force_version = "1",
+)

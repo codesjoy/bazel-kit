@@ -1,0 +1,10 @@
+load("//rules/changelog:defs.bzl", "changelog_generate", "changelog_init", "changelog_preview", "changelog_state_print", "changelog_state_reset", "changelog_verify")
+
+package(default_visibility = ["//visibility:public"])
+
+changelog_init(name = "init")
+changelog_generate(name = "generate")
+changelog_preview(name = "preview")
+changelog_verify(name = "verify")
+changelog_state_print(name = "state_print")
+changelog_state_reset(name = "state_reset")

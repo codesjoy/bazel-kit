@@ -1,0 +1,20 @@
+load("//rules/wire:defs.bzl", "wire_check", "wire_diff", "wire_gen")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["go.mod"])
+
+wire_gen(
+    name = "gen",
+    modules = [":go.mod"],
+)
+
+wire_diff(
+    name = "diff",
+    modules = [":go.mod"],
+)
+
+wire_check(
+    name = "check",
+    modules = [":go.mod"],
+)

@@ -1,0 +1,49 @@
+{
+  "gitops_repo": "git@github.com:acme/platform-gitops.git",
+  "baseline_environment": "itest-baseline",
+  "argocd": {
+    "project": "platform",
+    "wait_for_health": true
+  },
+  "preview": {
+    "gitops_root": "preview",
+    "namespace_template": "preview-${preview_id}-${service}",
+    "host_template": "${service}.${preview_id}.preview.example.test",
+    "scheme": "https"
+  },
+  "environments": {
+    "itest-baseline": {
+      "host_template": "${service}.itest.example.test",
+      "scheme": "https"
+    },
+    "dev": {
+      "gitops_root": "apps/dev",
+      "namespace_template": "dev-${service}",
+      "host_template": "${service}.dev.example.test",
+      "scheme": "https"
+    },
+    "staging": {
+      "gitops_root": "apps/staging",
+      "namespace_template": "staging-${service}",
+      "host_template": "${service}.staging.example.test",
+      "scheme": "https"
+    },
+    "prod": {
+      "gitops_root": "apps/prod",
+      "namespace_template": "prod-${service}",
+      "host_template": "${service}.prod.example.test",
+      "scheme": "https"
+    }
+  },
+  "services": {
+    "api": {
+      "image_repository": "ghcr.io/acme/example-api"
+    },
+    "web": {
+      "image_repository": "ghcr.io/acme/example-web"
+    },
+    "worker": {
+      "image_repository": "ghcr.io/acme/example-worker"
+    }
+  }
+}

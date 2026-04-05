@@ -1,0 +1,162 @@
+name: ci-pr
+
+on:
+  workflow_call:
+    inputs:
+      plan_target:
+        required: true
+        type: string
+      repo_config:
+        required: true
+        type: string
+      gitops_repository:
+        required: true
+        type: string
+      baseline_environment:
+        required: false
+        default: itest-baseline
+        type: string
+    secrets:
+      gitops_token:
+        required: true
+      argocd_auth_token:
+        required: false
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+
+jobs:
+  analyze:
+    uses: ./.github/workflows/analyze.yml
+    with:
+      plan_target: ${{ inputs.plan_target || '//examples/pipeline/monorepo:plan' }}
+      baseline_environment: ${{ inputs.baseline_environment || 'itest-baseline' }}
+      base_ref: ${{ github.event.pull_request.base.sha }}
+      head_ref: ${{ github.event.pull_request.head.sha }}
+
+  lint:
+    needs: analyze
+    if: ${{ needs.analyze.outputs.lint_matrix != '{"include":[]}' }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJSON(needs.analyze.outputs.lint_matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: bazelbuild/setup-bazelisk@v3
+      - run: bazel test "${{ matrix.target }}"
+
+  unit:
+    needs: analyze
+    if: ${{ needs.analyze.outputs.unit_matrix != '{"include":[]}' }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJSON(needs.analyze.outputs.unit_matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: bazelbuild/setup-bazelisk@v3
+      - run: bazel test "${{ matrix.target }}"
+
+  build_images:
+    needs:
+      - analyze
+      - lint
+      - unit
+    if: ${{ needs.analyze.outputs.image_matrix != '{"include":[]}' }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJSON(needs.analyze.outputs.image_matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: bazelbuild/setup-bazelisk@v3
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Build image and capture digest
+        run: |
+          set -euo pipefail
+          mkdir -p .artifacts/images
+          python3 scripts/pipeline/invoke_image_target.py \
+            --config "${{ inputs.repo_config || 'examples/pipeline/monorepo/pipeline.json' }}" \
+            --service "${{ matrix.service }}" \
+            --target "${{ matrix.target }}" \
+            --tag "pr-${{ github.event.number }}-${GITHUB_SHA::12}" \
+            --metadata-file ".artifacts/images/${{ matrix.service }}.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: preview-image-${{ matrix.service }}
+          path: .artifacts/images/${{ matrix.service }}.json
+
+  publish_preview:
+    needs:
+      - analyze
+      - build_images
+    if: ${{ needs.analyze.outputs.service_matrix != '{"include":[]}' }}
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 1
+      matrix: ${{ fromJSON(needs.analyze.outputs.service_matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: bazelbuild/setup-bazelisk@v3
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - uses: actions/download-artifact@v4
+        with:
+          name: preview-image-${{ matrix.service }}
+          path: .artifacts/images
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.gitops_repository || vars.PIPELINE_GITOPS_REPOSITORY }}
+          token: ${{ secrets.gitops_token }}
+          path: gitops
+      - name: Render preview manifests into GitOps repo
+        run: |
+          set -euo pipefail
+          python3 scripts/pipeline/render_to_gitops.py \
+            --config "${{ inputs.repo_config || 'examples/pipeline/monorepo/pipeline.json' }}" \
+            --service "${{ matrix.service }}" \
+            --render-target "${{ matrix.render_target }}" \
+            --environment preview \
+            --preview-mode "${{ matrix.preview_mode }}" \
+            --runtime-deps-json '${{ matrix.runtime_deps_json }}' \
+            --image-metadata ".artifacts/images/${{ matrix.service }}.json" \
+            --preview-id "pr-${{ github.event.number }}" \
+            --baseline-environment "${{ inputs.baseline_environment || 'itest-baseline' }}" \
+            --gitops-dir gitops
+      - name: Commit preview manifests
+        run: |
+          set -euo pipefail
+          scripts/pipeline/gitops_commit.sh gitops "preview(${{ matrix.service }}): ${GITHUB_SHA}"
+        shell: bash
+      - name: Wait for Argo CD health
+        if: ${{ secrets.argocd_auth_token != '' && vars.PIPELINE_ARGOCD_SERVER != '' }}
+        env:
+          ARGOCD_AUTH_TOKEN: ${{ secrets.argocd_auth_token }}
+          ARGOCD_SERVER: ${{ vars.PIPELINE_ARGOCD_SERVER }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v argocd >/dev/null 2>&1 || { echo "argocd CLI must be installed on the runner" >&2; exit 1; }
+          argocd login "$ARGOCD_SERVER" --auth-token "$ARGOCD_AUTH_TOKEN" --grpc-web
+          argocd app wait "pr-${{ github.event.number }}-${{ matrix.service }}" --health --timeout 600
+
+  integration:
+    needs:
+      - analyze
+      - publish_preview
+    if: ${{ needs.analyze.outputs.integration_matrix != '{"include":[]}' }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJSON(needs.analyze.outputs.integration_matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: bazelbuild/setup-bazelisk@v3
+      - run: |
+          bazel test \
+            --test_env=PIPELINE_PREVIEW_ID=pr-${{ github.event.number }} \
+            --test_env=PIPELINE_BASELINE_ENVIRONMENT=${{ inputs.baseline_environment || 'itest-baseline' }} \
+            "${{ matrix.target }}"

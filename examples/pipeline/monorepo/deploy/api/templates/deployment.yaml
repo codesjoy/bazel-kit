@@ -1,0 +1,34 @@
+{{- $image := printf "%s:%s" .Values.image.repository (.Values.image.tag | default "latest") -}}
+{{- if .Values.image.digest -}}
+{{- $image = printf "%s@%s" .Values.image.repository .Values.image.digest -}}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.pipeline.service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.pipeline.service }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.pipeline.service }}
+    spec:
+      containers:
+        - name: api
+          image: {{ $image | quote }}
+          ports:
+            - containerPort: {{ .Values.service.port }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.pipeline.service }}-runtime
+data:
+  ingress_host: {{ .Values.ingress.host | quote }}
+  preview_enabled: {{ .Values.previewEnabled | default false | quote }}
+{{- range $name, $value := .Values.runtimeDependencies }}
+  {{ $name }}: {{ $value | quote }}
+{{- end }}

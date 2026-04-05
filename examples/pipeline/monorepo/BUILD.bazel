@@ -1,0 +1,175 @@
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//rules/pipeline:defs.bzl", "pipeline_catalog", "pipeline_helm_render", "pipeline_plan", "pipeline_service")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["pipeline.json"])
+
+filegroup(
+    name = "shared_contracts",
+    srcs = ["shared/contracts/api.schema.json"],
+)
+
+filegroup(
+    name = "api_graph",
+    srcs = glob(["services/api/**"]) + [":shared_contracts"],
+)
+
+filegroup(
+    name = "web_graph",
+    srcs = glob(["services/web/**"]) + [":shared_contracts"],
+)
+
+filegroup(
+    name = "worker_graph",
+    srcs = glob(["services/worker/**"]),
+)
+
+sh_test(
+    name = "api_lint",
+    srcs = ["scripts/ok_test.sh"],
+    args = ["api-lint"],
+)
+
+sh_test(
+    name = "api_unit",
+    srcs = ["scripts/ok_test.sh"],
+    args = ["api-unit"],
+)
+
+sh_test(
+    name = "api_integration",
+    srcs = ["scripts/ok_test.sh"],
+    args = ["api-integration"],
+)
+
+sh_binary(
+    name = "api_image",
+    srcs = ["scripts/image_runner.sh"],
+    args = ["api"],
+)
+
+sh_test(
+    name = "web_lint",
+    srcs = ["scripts/ok_test.sh"],
+    args = ["web-lint"],
+)
+
+sh_test(
+    name = "web_unit",
+    srcs = ["scripts/ok_test.sh"],
+    args = ["web-unit"],
+)
+
+sh_test(
+    name = "web_integration",
+    srcs = ["scripts/ok_test.sh"],
+    args = ["web-integration"],
+)
+
+sh_binary(
+    name = "web_image",
+    srcs = ["scripts/image_runner.sh"],
+    args = ["web"],
+)
+
+sh_test(
+    name = "worker_lint",
+    srcs = ["scripts/ok_test.sh"],
+    args = ["worker-lint"],
+)
+
+sh_test(
+    name = "worker_unit",
+    srcs = ["scripts/ok_test.sh"],
+    args = ["worker-unit"],
+)
+
+sh_test(
+    name = "worker_integration",
+    srcs = ["scripts/ok_test.sh"],
+    args = ["worker-integration"],
+)
+
+sh_binary(
+    name = "worker_image",
+    srcs = ["scripts/image_runner.sh"],
+    args = ["worker"],
+)
+
+pipeline_helm_render(
+    name = "api_render",
+    service_name = "api",
+    chart_dir = "examples/pipeline/monorepo/deploy/api",
+    chart_files = glob(["deploy/api/**"]),
+)
+
+pipeline_helm_render(
+    name = "web_render",
+    service_name = "web",
+    chart_dir = "examples/pipeline/monorepo/deploy/web",
+    chart_files = glob(["deploy/web/**"]),
+)
+
+pipeline_helm_render(
+    name = "worker_render",
+    service_name = "worker",
+    chart_dir = "examples/pipeline/monorepo/deploy/worker",
+    chart_files = glob(["deploy/worker/**"]),
+)
+
+pipeline_service(
+    name = "api_service",
+    service_name = "api",
+    language = "go",
+    analysis_targets = [":api_graph"],
+    lint_targets = [":api_lint"],
+    unit_targets = [":api_unit"],
+    integration_targets = [":api_integration"],
+    image_targets = [":api_image"],
+    render_target = ":api_render",
+    runtime_deps = ["web"],
+)
+
+pipeline_service(
+    name = "web_service",
+    service_name = "web",
+    language = "web",
+    analysis_targets = [":web_graph"],
+    lint_targets = [":web_lint"],
+    unit_targets = [":web_unit"],
+    integration_targets = [":web_integration"],
+    image_targets = [":web_image"],
+    render_target = ":web_render",
+    runtime_deps = ["api"],
+)
+
+pipeline_service(
+    name = "worker_service",
+    service_name = "worker",
+    language = "custom",
+    analysis_targets = [":worker_graph"],
+    lint_targets = [":worker_lint"],
+    unit_targets = [":worker_unit"],
+    integration_targets = [":worker_integration"],
+    image_targets = [":worker_image"],
+    render_target = ":worker_render",
+    preview_mode = "full_isolated",
+    workload_kind = "worker",
+)
+
+pipeline_catalog(
+    name = "catalog",
+    services = [
+        ":api_service",
+        ":web_service",
+        ":worker_service",
+    ],
+    repo_config = ":pipeline.json",
+)
+
+pipeline_plan(
+    name = "plan",
+    catalog = ":catalog",
+)

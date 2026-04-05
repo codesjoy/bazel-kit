@@ -1,0 +1,57 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: example-services
+spec:
+  generators:
+    - git:
+        repoURL: git@github.com:acme/platform-gitops.git
+        revision: HEAD
+        directories:
+          - path: apps/dev/*
+          - path: apps/staging/*
+          - path: apps/prod/*
+  template:
+    metadata:
+      name: '{{path[1]}}-{{path.basename}}'
+    spec:
+      project: platform
+      source:
+        repoURL: git@github.com:acme/platform-gitops.git
+        targetRevision: HEAD
+        path: '{{path}}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{path[1]}}-{{path.basename}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: example-preview-services
+spec:
+  generators:
+    - git:
+        repoURL: git@github.com:acme/platform-gitops.git
+        revision: HEAD
+        directories:
+          - path: preview/pr-*/*
+  template:
+    metadata:
+      name: '{{path[1]}}-{{path.basename}}'
+    spec:
+      project: platform
+      source:
+        repoURL: git@github.com:acme/platform-gitops.git
+        targetRevision: HEAD
+        path: '{{path}}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{path[1]}}-{{path.basename}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true

@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "$1" != "template" ]]; then
+  printf 'unexpected helm subcommand: %s\n' "$1" >&2
+  exit 1
+fi
+
+release="$2"
+chart="$3"
+shift 3
+
+namespace=""
+values_files=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --namespace)
+      namespace="$2"
+      shift 2
+      ;;
+    --values)
+      values_files+=("$2")
+      shift 2
+      ;;
+    --set-string)
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
+printf 'release: %s\n' "$release"
+printf 'chart: %s\n' "$chart"
+printf 'namespace: %s\n' "$namespace"
+for file in "${values_files[@]}"; do
+  printf -- '--- values: %s\n' "$file"
+  cat "$file"
+done

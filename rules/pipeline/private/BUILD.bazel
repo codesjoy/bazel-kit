@@ -1,0 +1,241 @@
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//rules/pipeline:defs.bzl", "pipeline_catalog", "pipeline_helm_render", "pipeline_plan", "pipeline_service")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "launcher.bzl",
+    "plan_main.py",
+    "render_main.py",
+])
+
+filegroup(
+    name = "shared_contracts",
+    srcs = ["testdata/shared/contracts/schema.json"],
+)
+
+filegroup(
+    name = "api_graph",
+    srcs = glob(["testdata/services/api/**"]) + [":shared_contracts"],
+)
+
+filegroup(
+    name = "web_graph",
+    srcs = glob(["testdata/services/web/**"]) + [":shared_contracts"],
+)
+
+filegroup(
+    name = "worker_graph",
+    srcs = glob(["testdata/services/worker/**"]),
+)
+
+filegroup(
+    name = "plan_test_workspace",
+    srcs = [
+        "//:BUILD.bazel",
+        "//:MODULE.bazel",
+        "//:MODULE.bazel.lock",
+        "//rules/pipeline:BUILD.bazel",
+        "//rules/pipeline:defs.bzl",
+        "//rules/pipeline:extensions.bzl",
+        ":BUILD.bazel",
+        ":launcher.bzl",
+        ":plan_main.py",
+        ":render_main.py",
+    ] + glob(["testdata/**"]),
+)
+
+sh_test(
+    name = "api_lint",
+    srcs = ["testdata/ok_test.sh"],
+    args = ["api-lint"],
+)
+
+sh_test(
+    name = "api_unit",
+    srcs = ["testdata/ok_test.sh"],
+    args = ["api-unit"],
+)
+
+sh_test(
+    name = "api_integration",
+    srcs = ["testdata/ok_test.sh"],
+    args = ["api-integration"],
+)
+
+sh_binary(
+    name = "api_image",
+    srcs = ["testdata/noop_runner.sh"],
+    args = ["api-image"],
+)
+
+sh_test(
+    name = "web_lint",
+    srcs = ["testdata/ok_test.sh"],
+    args = ["web-lint"],
+)
+
+sh_test(
+    name = "web_unit",
+    srcs = ["testdata/ok_test.sh"],
+    args = ["web-unit"],
+)
+
+sh_test(
+    name = "web_integration",
+    srcs = ["testdata/ok_test.sh"],
+    args = ["web-integration"],
+)
+
+sh_binary(
+    name = "web_image",
+    srcs = ["testdata/noop_runner.sh"],
+    args = ["web-image"],
+)
+
+sh_test(
+    name = "worker_lint",
+    srcs = ["testdata/ok_test.sh"],
+    args = ["worker-lint"],
+)
+
+sh_test(
+    name = "worker_unit",
+    srcs = ["testdata/ok_test.sh"],
+    args = ["worker-unit"],
+)
+
+sh_test(
+    name = "worker_integration",
+    srcs = ["testdata/ok_test.sh"],
+    args = ["worker-integration"],
+)
+
+sh_binary(
+    name = "worker_image",
+    srcs = ["testdata/noop_runner.sh"],
+    args = ["worker-image"],
+)
+
+filegroup(
+    name = "fake_helm",
+    srcs = ["testdata/helm"],
+)
+
+pipeline_helm_render(
+    name = "api_render",
+    service_name = "api",
+    chart_dir = "rules/pipeline/private/testdata/charts/api",
+    chart_files = glob(["testdata/charts/api/**"]),
+    tool_helm = ":fake_helm",
+)
+
+pipeline_helm_render(
+    name = "web_render",
+    service_name = "web",
+    chart_dir = "rules/pipeline/private/testdata/charts/web",
+    chart_files = glob(["testdata/charts/web/**"]),
+    tool_helm = ":fake_helm",
+)
+
+pipeline_helm_render(
+    name = "worker_render",
+    service_name = "worker",
+    chart_dir = "rules/pipeline/private/testdata/charts/worker",
+    chart_files = glob(["testdata/charts/worker/**"]),
+    tool_helm = ":fake_helm",
+)
+
+pipeline_service(
+    name = "api_service",
+    service_name = "api",
+    language = "go",
+    analysis_targets = [":api_graph"],
+    lint_targets = [":api_lint"],
+    unit_targets = [":api_unit"],
+    integration_targets = [":api_integration"],
+    image_targets = [":api_image"],
+    render_target = ":api_render",
+    runtime_deps = ["web"],
+)
+
+pipeline_service(
+    name = "web_service",
+    service_name = "web",
+    language = "web",
+    analysis_targets = [":web_graph"],
+    lint_targets = [":web_lint"],
+    unit_targets = [":web_unit"],
+    integration_targets = [":web_integration"],
+    image_targets = [":web_image"],
+    render_target = ":web_render",
+    runtime_deps = ["api"],
+)
+
+pipeline_service(
+    name = "worker_service",
+    service_name = "worker",
+    language = "custom",
+    analysis_targets = [":worker_graph"],
+    lint_targets = [":worker_lint"],
+    unit_targets = [":worker_unit"],
+    integration_targets = [":worker_integration"],
+    image_targets = [":worker_image"],
+    render_target = ":worker_render",
+    preview_mode = "full_isolated",
+    runtime_deps = [],
+    workload_kind = "worker",
+)
+
+pipeline_catalog(
+    name = "catalog",
+    services = [
+        ":api_service",
+        ":web_service",
+        ":worker_service",
+    ],
+)
+
+pipeline_plan(
+    name = "plan_smoke_launcher",
+    catalog = ":catalog",
+)
+
+sh_test(
+    name = "runner_text_test",
+    srcs = ["runner_text_test.sh"],
+    data = [
+        "//rules/pipeline:defs.bzl",
+        "//rules/pipeline:extensions.bzl",
+        ":launcher.bzl",
+        ":plan_main.py",
+        ":render_main.py",
+        "//tools/pipeline/helm:versions.bzl",
+    ],
+    args = [
+        "$(location //rules/pipeline:defs.bzl)",
+        "$(location //rules/pipeline:extensions.bzl)",
+        "$(location :launcher.bzl)",
+        "$(location :plan_main.py)",
+        "$(location :render_main.py)",
+        "$(location //tools/pipeline/helm:versions.bzl)",
+    ],
+)
+
+sh_test(
+    name = "plan_smoke_test",
+    srcs = ["plan_smoke_test.sh"],
+    data = [
+        ":plan_smoke_launcher",
+        ":plan_test_workspace",
+    ],
+    args = ["$(location :plan_smoke_launcher)"],
+)
+
+sh_test(
+    name = "render_smoke_test",
+    srcs = ["render_smoke_test.sh"],
+    data = [":api_render"],
+    args = ["$(location :api_render)"],
+)

@@ -1,0 +1,30 @@
+name: cleanup-preview
+
+on:
+  workflow_call:
+    inputs:
+      gitops_repository:
+        required: true
+        type: string
+    secrets:
+      gitops_token:
+        required: true
+  pull_request:
+    types:
+      - closed
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.gitops_repository || vars.PIPELINE_GITOPS_REPOSITORY }}
+          token: ${{ secrets.gitops_token }}
+          path: gitops
+      - name: Remove preview manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/pipeline/cleanup_gitops.sh gitops "preview/pr-${{ github.event.number }}" "cleanup(preview): pr-${{ github.event.number }}"

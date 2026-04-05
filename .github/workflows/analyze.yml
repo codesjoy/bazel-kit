@@ -1,0 +1,84 @@
+name: analyze
+
+on:
+  workflow_call:
+    inputs:
+      plan_target:
+        required: true
+        type: string
+      baseline_environment:
+        required: false
+        default: itest-baseline
+        type: string
+      base_ref:
+        required: false
+        default: ""
+        type: string
+      head_ref:
+        required: false
+        default: HEAD
+        type: string
+      changed_files:
+        required: false
+        default: ""
+        type: string
+    outputs:
+      plan_json:
+        value: ${{ jobs.analyze.outputs.plan_json }}
+      service_matrix:
+        value: ${{ jobs.analyze.outputs.service_matrix }}
+      lint_matrix:
+        value: ${{ jobs.analyze.outputs.lint_matrix }}
+      unit_matrix:
+        value: ${{ jobs.analyze.outputs.unit_matrix }}
+      integration_matrix:
+        value: ${{ jobs.analyze.outputs.integration_matrix }}
+      image_matrix:
+        value: ${{ jobs.analyze.outputs.image_matrix }}
+      render_matrix:
+        value: ${{ jobs.analyze.outputs.render_matrix }}
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    outputs:
+      plan_json: ${{ steps.export.outputs.plan_json }}
+      service_matrix: ${{ steps.export.outputs.service_matrix }}
+      lint_matrix: ${{ steps.export.outputs.lint_matrix }}
+      unit_matrix: ${{ steps.export.outputs.unit_matrix }}
+      integration_matrix: ${{ steps.export.outputs.integration_matrix }}
+      image_matrix: ${{ steps.export.outputs.image_matrix }}
+      render_matrix: ${{ steps.export.outputs.render_matrix }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: bazelbuild/setup-bazelisk@v3
+
+      - name: Run pipeline plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .artifacts
+          args=(
+            --output .artifacts/pipeline-plan.json
+            --baseline-environment "${{ inputs.baseline_environment }}"
+          )
+          if [[ -n "${{ inputs.changed_files }}" ]]; then
+            args+=(--changed-files "${{ inputs.changed_files }}")
+          elif [[ -n "${{ inputs.base_ref }}" ]]; then
+            args+=(--base "${{ inputs.base_ref }}" --head "${{ inputs.head_ref }}")
+          fi
+          bazel run "${{ inputs.plan_target }}" -- "${args[@]}"
+
+      - id: export
+        name: Export workflow outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "plan_json=$(jq -c . .artifacts/pipeline-plan.json)" >> "$GITHUB_OUTPUT"
+          echo "service_matrix=$(jq -c '.service_matrix' .artifacts/pipeline-plan.json)" >> "$GITHUB_OUTPUT"
+          echo "lint_matrix=$(jq -c '.lint_matrix' .artifacts/pipeline-plan.json)" >> "$GITHUB_OUTPUT"
+          echo "unit_matrix=$(jq -c '.unit_matrix' .artifacts/pipeline-plan.json)" >> "$GITHUB_OUTPUT"
+          echo "integration_matrix=$(jq -c '.integration_matrix' .artifacts/pipeline-plan.json)" >> "$GITHUB_OUTPUT"
+          echo "image_matrix=$(jq -c '.image_matrix' .artifacts/pipeline-plan.json)" >> "$GITHUB_OUTPUT"
+          echo "render_matrix=$(jq -c '.render_matrix' .artifacts/pipeline-plan.json)" >> "$GITHUB_OUTPUT"

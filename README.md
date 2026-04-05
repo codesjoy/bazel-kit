@@ -26,6 +26,10 @@ The repository is organized around capability-focused, runnable workflows rather
 
 `workspace` provides maintenance helpers for keeping a multi-module Go workspace in sync. Its current scope is `go.work` generation, optional `bazel mod tidy`, and optional execution of a follow-up runnable target such as Gazelle. Read [docs/workspace.md](docs/workspace.md) and inspect [examples/workspace](examples/workspace).
 
+### `pipeline`
+
+`pipeline` provides a Bazel-driven CI/CD orchestration layer for monorepos and microservices. It exposes service declarations, a catalog export, impact analysis, Helm rendering, and reusable GitHub Actions + Argo CD integration helpers without reimplementing language-specific build and test rules. Read [docs/pipeline.md](docs/pipeline.md) and inspect [examples/pipeline/monorepo](examples/pipeline/monorepo).
+
 ## Quick Start
 
 ```starlark
@@ -39,6 +43,9 @@ web_tools.install()
 
 modelgen_tools = use_extension("@codesjoy_bazel_kit//rules/modelgen:extensions.bzl", "modelgen_tools")
 modelgen_tools.install()
+
+pipeline_tools = use_extension("@codesjoy_bazel_kit//rules/pipeline:extensions.bzl", "pipeline_tools")
+pipeline_tools.install()
 
 use_repo(
     quality_tools,
@@ -61,6 +68,11 @@ use_repo(
     modelgen_tools,
     "modelgen_tool_codesjoy_modelgen",
 )
+
+use_repo(
+    pipeline_tools,
+    "pipeline_tool_helm",
+)
 ```
 
 For protobuf, use upstream `rules_buf` directly instead of a `bazel-kit` wrapper. The repository’s official setup example and migration notes live in [docs/protobuf.md](docs/protobuf.md).
@@ -73,6 +85,7 @@ From there, load the rule entrypoints you need:
 - `@codesjoy_bazel_kit//rules/web:defs.bzl`
 - `@codesjoy_bazel_kit//rules/modelgen:defs.bzl`
 - `@codesjoy_bazel_kit//rules/workspace:defs.bzl`
+- `@codesjoy_bazel_kit//rules/pipeline:defs.bzl`
 
 ## Capability Matrix
 
@@ -83,12 +96,14 @@ From there, load the rule entrypoints you need:
 | `protobuf` | none in this repo; use upstream `@rules_buf//buf:defs.bzl` and `@rules_buf//gazelle/buf:buf` | upstream `rules_buf` toolchains | upstream `buf_format` writes source files; generated lint/breaking tests do not | image maintenance for breaking checks remains caller-owned | `//examples/protobuf:gazelle`, `//examples/protobuf:buf_format` |
 | `modelgen` | `codesjoy_modelgen` | `codesjoy-modelgen` | yes | a reachable database is required when the target is actually run | `//examples/modelgen:generate_models` |
 | `workspace` | `workspace_sync` | none | yes; it rewrites `go.work` and may trigger follow-up commands that write files | `go`, `bazel`, and whatever the optional follow-up target requires | `//examples/workspace:sync` |
+| `pipeline` | `pipeline_service`, `pipeline_catalog`, `pipeline_plan`, `pipeline_helm_render` | `helm` | `pipeline_helm_render` writes rendered manifests to an explicit output directory; the GitOps helper scripts update external repos | `python3`, `bazel`, optional `git`, and Helm through `pipeline_tools` | `//examples/pipeline/monorepo:plan`, `//examples/pipeline/monorepo:api_render` |
 
 ## Design Conventions
 
 - A **capability** is a narrow, cohesive workflow surface such as `quality`, `protobuf`, or `workspace`.
 - A **managed tool** is a binary installed through a module extension and imported into the repo with `use_repo`, rather than something users are expected to preinstall manually.
 - A **source-tree-writing** rule is a runnable target that intentionally updates files in `BUILD_WORKSPACE_DIRECTORY`. `go_fmt` and `workspace_sync` in this repo, and upstream tools such as `buf_format`, fall into this category.
+- A **delivery orchestration** rule is a runnable target that computes CI/CD plans or renders deployment manifests without owning the underlying build and image rule ecosystems. `pipeline_plan` and `pipeline_helm_render` fall into this category.
 - Public APIs stay small on purpose. If a workflow needs more policy, it should usually live in the caller's config files or surrounding BUILD logic rather than in a wide Bazel abstraction layer here.
 
 ## Documentation Map
@@ -98,6 +113,7 @@ From there, load the rule entrypoints you need:
 - [docs/protobuf.md](docs/protobuf.md): design rationale for Buf-managed protobuf workflows, rule reference, examples, and troubleshooting
 - [docs/modelgen.md](docs/modelgen.md): design, tool pinning, rule reference, and operational notes for `codesjoy-modelgen`
 - [docs/workspace.md](docs/workspace.md): design and operational guide for `workspace_sync`
+- [docs/pipeline.md](docs/pipeline.md): service declarations, impact analysis, Helm rendering, and GitHub Actions / Argo CD workflow contracts
 
 ## Example Map
 
@@ -108,3 +124,4 @@ From there, load the rule entrypoints you need:
 - [examples/protobuf](examples/protobuf): official `rules_buf` + Gazelle setup for `proto_library`, `buf_lint_test`, `buf_breaking_test`, and `buf_format`
 - [examples/modelgen](examples/modelgen): launcher wiring for `codesjoy-modelgen`
 - [examples/workspace](examples/workspace): `workspace_sync` with a follow-up executable target
+- [examples/pipeline/monorepo](examples/pipeline/monorepo): service catalog, change analysis, Helm charts, GitOps config, and Argo `ApplicationSet` samples

@@ -1,0 +1,136 @@
+name: promote-prod
+
+on:
+  workflow_call:
+    inputs:
+      catalog_target:
+        required: true
+        type: string
+      repo_config:
+        required: true
+        type: string
+      gitops_repository:
+        required: true
+        type: string
+      services:
+        required: true
+        type: string
+      digests_json:
+        required: true
+        type: string
+      baseline_environment:
+        required: false
+        default: itest-baseline
+        type: string
+    secrets:
+      gitops_token:
+        required: true
+      argocd_auth_token:
+        required: false
+  workflow_dispatch:
+    inputs:
+      catalog_target:
+        required: true
+        type: string
+      repo_config:
+        required: true
+        type: string
+      gitops_repository:
+        required: true
+        type: string
+      services:
+        required: true
+        type: string
+      digests_json:
+        required: true
+        type: string
+      baseline_environment:
+        required: false
+        default: itest-baseline
+        type: string
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - uses: actions/checkout@v4
+      - uses: bazelbuild/setup-bazelisk@v3
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.gitops_repository || github.event.inputs.gitops_repository }}
+          token: ${{ secrets.gitops_token }}
+          path: gitops
+      - name: Build catalog output
+        run: |
+          bazel build "${{ inputs.catalog_target || github.event.inputs.catalog_target }}"
+          bazel cquery --output=files "${{ inputs.catalog_target || github.event.inputs.catalog_target }}" > .artifacts.catalog
+      - name: Materialize digest metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .artifacts/images
+          python3 - <<'PY'
+          import json
+          import pathlib
+          config = json.load(open("${{ inputs.repo_config || github.event.inputs.repo_config }}", "r", encoding="utf-8"))
+          digests = json.loads("""${{ inputs.digests_json || github.event.inputs.digests_json }}""")
+          for service, payload in digests.items():
+              image_repository = config["services"][service]["image_repository"]
+              metadata = {
+                  "service": service,
+                  "image_repository": image_repository,
+                  "image_digest": payload["image_digest"],
+                  "image_tag": payload.get("image_tag", "prod"),
+              }
+              pathlib.Path(".artifacts/images").mkdir(parents=True, exist_ok=True)
+              with open(f".artifacts/images/{service}.json", "w", encoding="utf-8") as handle:
+                  json.dump(metadata, handle, indent=2, sort_keys=True)
+                  handle.write("\\n")
+          PY
+      - name: Render prod manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          catalog_path="$(cat .artifacts.catalog)"
+          IFS=',' read -r -a services <<< "${{ inputs.services || github.event.inputs.services }}"
+          for service in "${services[@]}"; do
+            service="$(echo "$service" | xargs)"
+            metadata="$(jq -c ".services[] | select(.service_name == \"${service}\")" "$catalog_path")"
+            render_target="$(echo "$metadata" | jq -r '.render_target')"
+            preview_mode="$(echo "$metadata" | jq -r '.preview_mode')"
+            runtime_deps_json="$(echo "$metadata" | jq -c '.runtime_deps')"
+            python3 scripts/pipeline/render_to_gitops.py \
+              --config "${{ inputs.repo_config || github.event.inputs.repo_config }}" \
+              --service "$service" \
+              --render-target "$render_target" \
+              --environment prod \
+              --preview-mode "$preview_mode" \
+              --runtime-deps-json "$runtime_deps_json" \
+              --image-metadata ".artifacts/images/${service}.json" \
+              --baseline-environment "${{ inputs.baseline_environment || github.event.inputs.baseline_environment || 'itest-baseline' }}" \
+              --gitops-dir gitops
+          done
+      - name: Commit prod manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          scripts/pipeline/gitops_commit.sh gitops "promote(prod): ${GITHUB_SHA}"
+      - name: Wait for prod Argo CD health
+        if: ${{ secrets.argocd_auth_token != '' && vars.PIPELINE_ARGOCD_SERVER != '' }}
+        env:
+          ARGOCD_AUTH_TOKEN: ${{ secrets.argocd_auth_token }}
+          ARGOCD_SERVER: ${{ vars.PIPELINE_ARGOCD_SERVER }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v argocd >/dev/null 2>&1 || { echo "argocd CLI must be installed on the runner" >&2; exit 1; }
+          argocd login "$ARGOCD_SERVER" --auth-token "$ARGOCD_AUTH_TOKEN" --grpc-web
+          IFS=',' read -r -a services <<< "${{ inputs.services || github.event.inputs.services }}"
+          for service in "${services[@]}"; do
+            service="$(echo "$service" | xargs)"
+            argocd app wait "prod-${service}" --health --timeout 600
+          done

@@ -14,19 +14,26 @@ go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")
 go_sdk.download(version = "1.25.8")
 
 quality_tools = use_extension("//rules/quality:extensions.bzl", "quality_tools")
-quality_tools.install(domains = ["go", "shell", "web"])
+quality_tools.install(domains = [
+    "go",
+    "shell",
+    "web",
+])
 
 web_tools = use_extension("//rules/web:extensions.bzl", "web_tools")
 web_tools.install()
 
 buf = use_extension("@rules_buf//buf:extensions.bzl", "buf")
 buf.toolchains(
-    version = "v1.47.2",
     sha256 = "1b37b75dc0a777a0cba17fa2604bc9906e55bb4c578823d8b7a8fe3fc9fe4439",
+    version = "v1.47.2",
 )
 
 modelgen_tools = use_extension("//rules/modelgen:extensions.bzl", "modelgen_tools")
 modelgen_tools.install()
+
+pipeline_tools = use_extension("//rules/pipeline:extensions.bzl", "pipeline_tools")
+pipeline_tools.install()
 
 use_repo(
     quality_tools,
@@ -52,4 +59,9 @@ register_toolchains("@rules_buf_toolchains//:all")
 use_repo(
     modelgen_tools,
     "modelgen_tool_codesjoy_modelgen",
+)
+
+use_repo(
+    pipeline_tools,
+    "pipeline_tool_helm",
 )

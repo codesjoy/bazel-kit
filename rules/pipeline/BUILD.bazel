@@ -1,6 +1,6 @@
 package(default_visibility = ["//visibility:public"])
 
 exports_files([
-    "MODULE.bazel",
-    "MODULE.bazel.lock",
+    "defs.bzl",
+    "extensions.bzl",
 ])
